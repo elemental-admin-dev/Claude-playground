@@ -18,7 +18,6 @@ const KINDS = [
   "leaves",
   "planks",
   "brick",
-  "glass",
 ];
 
 function clampByte(n) {
@@ -76,10 +75,6 @@ function pixelColor(kind, px, py, size = TILE_SIZE) {
       const isMortar = py % rowHeight === 0 || Math.floor((px + offset) % brickWidth) === 0;
       if (isMortar) return mix([158, 148, 138], speckle(px, py, 139, 10));
       return mix([150, 60, 45], speckle(px, py, 141, 20));
-    }
-    case "glass": {
-      const shine = Math.abs((px - py) % size) < 2 ? 25 : 0; // faint diagonal highlight
-      return mix([205, 225, 230], speckle(px, py, 149, 14) + shine);
     }
     default:
       return [255, 0, 255]; // unmistakable "missing texture" marker

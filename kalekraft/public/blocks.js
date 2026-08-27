@@ -78,7 +78,7 @@ const BLOCK_INFO = {
     name: "Glass",
     color: [0.82, 0.9, 0.92],
     solid: true,
-    textures: { top: "glass", side: "glass", bottom: "glass" },
+    transparent: true, // renders like water: flat-colored, alpha-blended, no atlas texture
   },
 };
 

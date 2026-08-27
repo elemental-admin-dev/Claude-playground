@@ -37,6 +37,24 @@ test("water is bucketed separately and does not cull against itself", () => {
   assert.equal(water.quadCount, 10);
 });
 
+test("glass is transparent: bucketed with water, not the opaque atlas-textured mesh", () => {
+  const world = blankWorld();
+  world.setBlock(1, 1, 1, BLOCKS.GLASS);
+  world.setBlock(2, 1, 1, BLOCKS.GLASS);
+  const { opaque, water } = buildChunkMeshData(world, 0, 0);
+  assert.equal(opaque.quadCount, 0); // not drawn as an opaque solid
+  assert.equal(water.quadCount, 10); // drawn in the alpha-blended bucket, like water
+});
+
+test("a solid block face against glass is drawn (glass doesn't occlude, same as water)", () => {
+  const world = blankWorld();
+  world.setBlock(1, 1, 1, BLOCKS.STONE);
+  world.setBlock(2, 1, 1, BLOCKS.GLASS);
+  const { opaque, water } = buildChunkMeshData(world, 0, 0);
+  assert.equal(opaque.quadCount, 6); // stone still shows all 6 faces
+  assert.equal(water.quadCount, 5); // glass's face against the stone is culled
+});
+
 test("an empty chunk produces no geometry", () => {
   const world = blankWorld();
   const { opaque, water } = buildChunkMeshData(world, 0, 0);

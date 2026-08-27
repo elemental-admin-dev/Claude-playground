@@ -383,6 +383,7 @@ let selectedBlock = HOTBAR_BLOCKS[0];
 
 window.addEventListener("keydown", (e) => {
   keys.add(e.code);
+  if (e.repeat) return; // one-shot actions below should fire once per press, not per OS auto-repeat tick
   if (e.code === "KeyN") newWorld();
   if (e.code === "KeyC") toggleCraftingPanel();
   tryCraftFromKey(e.code);
@@ -512,6 +513,9 @@ updateHotbarCounts();
 // ----------------------------------------------------------------- crafting
 
 const CRAFT_KEYS = ["KeyZ", "KeyX", "KeyV"]; // one per RECIPES entry, in order
+if (CRAFT_KEYS.length < RECIPES.length) {
+  throw new Error(`CRAFT_KEYS (${CRAFT_KEYS.length}) has fewer entries than RECIPES (${RECIPES.length}) — add a keybind for the new recipe.`);
+}
 const craftingPanel = document.getElementById("crafting-panel");
 const craftingList = document.getElementById("crafting-list");
 
