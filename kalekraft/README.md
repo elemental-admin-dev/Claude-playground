@@ -90,10 +90,11 @@ physics — the entire simulation core, with no browser or WebGL required.
 ## Limitations
 
 This is a tech-demo scale sandbox, not a game: no multiplayer, no
-crafting/inventory (the hotbar is unlimited), no mobs, no textures
-(flat-shaded per-face colors), and no step-up assist — a single raised
-block (or a low tree branch) fully blocks walking into it; jump over it.
-The world itself is no longer the limiting factor: chunks stream in as you
+crafting/inventory (the hotbar is unlimited), no mobs, and no textures
+(flat-shaded per-face colors). Anything taller than a single block (a tree
+trunk, a cliff face) still fully blocks walking into it — jump over it or
+go around; single-block ledges auto-step. The world itself is no longer
+the limiting factor: chunks stream in as you
 walk, generation and re-meshing are budgeted per frame, editing only
 rebuilds the touched chunk(s), and unedited chunks far from the player are
 evicted from memory (an edited chunk never is, since there's nowhere else

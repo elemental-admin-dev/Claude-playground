@@ -6,6 +6,7 @@ const MOVE_SPEED = 5;
 const HALF_WIDTH = 0.3;
 const HEIGHT = 1.7;
 const EYE_OFFSET = 1.55;
+const STEP_HEIGHT = 1.0; // a single raised block is auto-climbed instead of blocking movement
 
 function createPlayer(x, y, z) {
   return { x, y, z, vx: 0, vy: 0, vz: 0, onGround: false };
@@ -39,13 +40,28 @@ function stepPlayer(world, player, input, dt) {
   vy += GRAVITY * dt;
   if (input.jump && player.onGround) vy = JUMP_SPEED;
 
+  // A blocked horizontal move is allowed through anyway if the obstruction
+  // is at most STEP_HEIGHT tall — i.e. the same move is clear one block up.
+  let stepUp = 0;
+
   let nx = x + vx * dt;
-  if (collidesAt(world, nx, y, z)) nx = x;
+  if (collidesAt(world, nx, y, z)) {
+    if (!collidesAt(world, nx, y + STEP_HEIGHT, z)) stepUp = STEP_HEIGHT;
+    else nx = x;
+  }
 
   let nz = z + vz * dt;
-  if (collidesAt(world, nx, y, nz)) nz = z;
+  if (collidesAt(world, nx, y, nz)) {
+    if (!collidesAt(world, nx, y + STEP_HEIGHT, nz)) stepUp = STEP_HEIGHT;
+    else nz = z;
+  }
 
   let ny = y + vy * dt;
+  if (stepUp > 0 && ny < y + stepUp) {
+    ny = y + stepUp; // snap onto the ledge; gravity settles the rest back down over the next few ticks
+    vy = Math.max(vy, 0);
+  }
+
   let onGround = false;
   if (collidesAt(world, nx, ny, nz)) {
     if (vy < 0) onGround = true;

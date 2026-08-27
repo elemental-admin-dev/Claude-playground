@@ -6,7 +6,7 @@ import { BLOCKS } from "../public/blocks.js";
 
 function flatFloorWorld() {
   const world = new World(0, { chunkSize: 10, chunkHeight: 10, autoGenerate: false });
-  for (let x = 0; x < 10; x++) {
+  for (let x = 0; x < 30; x++) {
     for (let z = 0; z < 10; z++) {
       world.setBlock(x, 0, z, BLOCKS.STONE);
     }
@@ -45,7 +45,7 @@ test("a grounded player can jump", () => {
   assert.ok(jumped.vy > 0);
 });
 
-test("a wall blocks horizontal movement", () => {
+test("a two-block-tall wall blocks horizontal movement", () => {
   const world = flatFloorWorld();
   world.setBlock(6, 1, 5, BLOCKS.STONE);
   world.setBlock(6, 2, 5, BLOCKS.STONE);
@@ -53,5 +53,17 @@ test("a wall blocks horizontal movement", () => {
   for (let i = 0; i < 200; i++) {
     player = stepPlayer(world, player, { moveX: 1, moveZ: 0, jump: false }, 1 / 60);
   }
-  assert.ok(player.x < 5.71); // stopped by the wall, not walked through it
+  assert.ok(player.x < 5.71); // too tall to step up onto; stopped by the wall
+});
+
+test("a single-block-tall ledge is auto-climbed, not blocked", () => {
+  const world = flatFloorWorld();
+  // a raised platform starting at x=6, one block tall, nothing above it
+  for (let x = 6; x < 30; x++) world.setBlock(x, 1, 5, BLOCKS.STONE);
+  let player = createPlayer(5, 1, 5);
+  for (let i = 0; i < 200; i++) {
+    player = stepPlayer(world, player, { moveX: 1, moveZ: 0, jump: false }, 1 / 60);
+  }
+  assert.ok(player.x > 6.5); // walked past the ledge, not stuck against it
+  assert.ok(player.y > 1.9 && player.y < 2.2); // standing on top of the platform (floor + 1)
 });
