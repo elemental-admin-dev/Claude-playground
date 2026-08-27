@@ -5,12 +5,15 @@ import { BLOCKS, BLOCK_INFO, HOTBAR_BLOCKS } from "./blocks.js";
 import { createPlayer, stepPlayer, EYE_OFFSET } from "./player.js";
 import { KINDS, TILE_SIZE, pixelColor } from "./textures.js";
 import { Inventory } from "./inventory.js";
+import { createMob, stepMob, HALF_WIDTH as MOB_HALF_WIDTH, HEIGHT as MOB_HEIGHT } from "./mob.js";
 
 const SAVE_KEY = "kalekraft-save-v3";
 const REACH = 6;
 const MOUSE_SENSITIVITY = 0.0022;
 const RENDER_DISTANCE = 5; // chunks (radius)
 const CHUNKS_PER_FRAME = 2; // budget so entering a new area doesn't stall a frame
+const MOB_COUNT = 6;
+const MOB_SPAWN_RADIUS = 12; // blocks, around the player's spawn point
 // Comfortably beyond RENDER_DISTANCE (mesh-boundary queries generate ~1 chunk of
 // halo past it) so a chunk isn't evicted and immediately regenerated as the
 // player wanders back and forth near the render-distance edge.
@@ -34,13 +37,32 @@ function loadSave() {
   }
 }
 
+function columnSurface(world, wx, wz) {
+  for (let y = world.chunkHeight - 1; y > 0; y--) {
+    if (world.getBlock(wx, y, wz) !== BLOCKS.AIR) return y;
+  }
+  return null;
+}
+
 function findSpawn(world) {
   const wx = 8;
   const wz = 8;
-  for (let y = world.chunkHeight - 1; y > 0; y--) {
-    if (world.getBlock(wx, y, wz) !== BLOCKS.AIR) return { x: wx + 0.5, y: y + 1, z: wz + 0.5 };
+  const surface = columnSurface(world, wx, wz);
+  return { x: wx + 0.5, y: (surface ?? world.chunkHeight - 2) + 1, z: wz + 0.5 };
+}
+
+// Mobs aren't saved with the world — they're ambient wildlife, not player
+// state, so a fresh batch spawns near the player every time the page loads.
+function spawnMobs(world, center) {
+  const mobs = [];
+  for (let i = 0; i < MOB_COUNT; i++) {
+    const wx = Math.floor(center.x + (Math.random() * 2 - 1) * MOB_SPAWN_RADIUS);
+    const wz = Math.floor(center.z + (Math.random() * 2 - 1) * MOB_SPAWN_RADIUS);
+    const surface = columnSurface(world, wx, wz);
+    if (surface === null) continue;
+    mobs.push(createMob(wx + 0.5, surface + 1, wz + 0.5));
   }
-  return { x: wx + 0.5, y: world.chunkHeight - 1, z: wz + 0.5 };
+  return mobs;
 }
 
 const saved = loadSave();
@@ -54,6 +76,7 @@ if (saved?.player) {
 let yaw = saved?.player?.yaw ?? 0;
 let pitch = saved?.player?.pitch ?? 0;
 let inventory = saved?.inventory ?? new Inventory();
+let mobs = spawnMobs(world, player);
 
 function persist() {
   const data = { world: world.serialize(), player: { ...player, yaw, pitch }, inventory: inventory.serialize() };
@@ -72,6 +95,8 @@ function newWorld() {
   Object.assign(player, findSpawn(world), { vx: 0, vy: 0, vz: 0 });
   inventory = new Inventory();
   updateHotbarCounts();
+  mobs = spawnMobs(world, player);
+  rebuildMobMeshes();
   resetChunkStreaming();
 }
 
@@ -241,6 +266,31 @@ const highlight = new THREE.LineSegments(highlightGeometry, new THREE.LineBasicM
 highlight.visible = false;
 scene.add(highlight);
 
+// ---------------------------------------------------------------------- mobs
+
+const mobGeometry = new THREE.BoxGeometry(MOB_HALF_WIDTH * 2, MOB_HEIGHT, MOB_HALF_WIDTH * 2);
+const mobMaterial = new THREE.MeshLambertMaterial({ color: 0xd9a066 });
+let mobMeshes = [];
+
+function rebuildMobMeshes() {
+  for (const mesh of mobMeshes) scene.remove(mesh);
+  mobMeshes = mobs.map(() => {
+    const mesh = new THREE.Mesh(mobGeometry, mobMaterial);
+    scene.add(mesh);
+    return mesh;
+  });
+}
+rebuildMobMeshes();
+
+function updateMobs(dt) {
+  mobs = mobs.map((mob) => stepMob(world, mob, dt));
+  mobs.forEach((mob, i) => {
+    const mesh = mobMeshes[i];
+    mesh.position.set(mob.x, mob.y + MOB_HEIGHT / 2, mob.z);
+    if (mob.moveX !== 0 || mob.moveZ !== 0) mesh.rotation.y = Math.atan2(mob.moveX, mob.moveZ);
+  });
+}
+
 function resize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -392,6 +442,7 @@ function animate(now) {
 
   updateChunkStreaming();
   processChunkQueue();
+  updateMobs(dt);
 
   if (document.pointerLockElement === canvas) {
     const forward = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);

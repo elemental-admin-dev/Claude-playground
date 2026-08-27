@@ -1,10 +1,10 @@
 # Kalekraft
 
 A small browser voxel sandbox — not Minecraft (trademark reasons, and
-scope), but the same idea in miniature: procedurally generated terrain,
-first-person movement with gravity and collision, and gathering and placing
-blocks (break one to add it to your inventory, spend one to place it),
-rendered with Three.js.
+scope), but the same idea in miniature: procedurally generated terrain
+with a few wandering passive mobs, first-person movement with gravity and
+collision, and gathering and placing blocks (break one to add it to your
+inventory, spend one to place it), rendered with Three.js.
 
 ## Run
 
@@ -76,17 +76,26 @@ meshes, not the whole world.
   only the per-face fake-AO shade (white for textured blocks, the real hue
   for untextured ones like water) — hue comes from the texture map.
   Doesn't touch Three.js or WebGL, so it's fully unit-testable.
-- `player.js` — pure physics: gravity, jumping, and axis-separated AABB vs.
-  voxel collision.
+- `physics.js` — shared AABB-vs-voxel collision, gravity, and step-up
+  movement, generic over a body's size/speed so both the player and mobs
+  use the same rules.
+- `player.js` — a thin wrapper over `physics.js` with the player's own
+  size/speed/jump constants.
+- `mob.js` — a small passive wanderer built on the same `physics.js`:
+  picks a random heading, walks it for a few seconds (or immediately if it
+  gets stuck against something), then picks a new one. The AI is seeded by
+  an injectable `rng`, so it's fully deterministic and unit-testable.
 - `inventory.js` — a simple per-block-id item count: breaking adds one,
   placing costs one (and refuses if you don't have one). Serializable, so
   it saves and loads with the rest of the world.
 - `main.js` — the only file that isn't unit tested: Three.js scene/camera
   setup, pointer-lock mouse look, keyboard input, the render loop, the
   chunk streaming manager (mesh chunks within render distance a few per
-  frame, unmesh — not discard — the rest as the player moves), hotbar UI,
-  and localStorage persistence. It's a thin wrapper around the modules
-  above.
+  frame, unmesh — not discard — the rest as the player moves), spawning
+  and rendering mobs as simple colored boxes, hotbar UI, and localStorage
+  persistence. It's a thin wrapper around the modules above. Mobs
+  themselves aren't saved — they're ambient wildlife, not player state, so
+  a fresh batch spawns near the player each time the page loads.
 - `server.js` — Express serving `public/` as static files, plus Three's
   module build so the client can `import "three"` via an import map with no
   bundler or CDN dependency.
@@ -100,13 +109,16 @@ npm test
 Runs unit tests (`node --test`) for noise, terrain rules, chunk-aware world
 generation/raycasting (including determinism across chunk and negative
 coordinates, and boundary-straddling trees), procedural textures, mesh
-face-culling and UV mapping, inventory accounting, and player physics —
-the entire simulation core, with no browser or WebGL required.
+face-culling and UV mapping, inventory accounting, shared physics, and
+player/mob movement (including that mob AI is deterministic for a given
+rng) — the entire simulation core, with no browser or WebGL required.
 
 ## Limitations
 
 This is a tech-demo scale sandbox, not a game: no crafting (raw blocks
-only, no recipes), no mobs, and no multiplayer. Anything taller than a
+only, no recipes), no multiplayer, and mobs are purely decorative — they
+wander, nothing more (no interaction with the player, each other, or
+combat). Anything taller than a
 single block (a tree trunk, a cliff face) still fully blocks walking into
 it — jump over it or go around; single-block ledges auto-step. The world
 itself is no longer the limiting factor: chunks stream in as you
