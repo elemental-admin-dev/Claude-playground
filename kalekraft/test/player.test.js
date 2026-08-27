@@ -5,7 +5,7 @@ import { createPlayer, stepPlayer } from "../public/player.js";
 import { BLOCKS } from "../public/blocks.js";
 
 function flatFloorWorld() {
-  const world = new World(10, 10, 10);
+  const world = new World(0, { chunkSize: 10, chunkHeight: 10, autoGenerate: false });
   for (let x = 0; x < 10; x++) {
     for (let z = 0; z < 10; z++) {
       world.setBlock(x, 0, z, BLOCKS.STONE);

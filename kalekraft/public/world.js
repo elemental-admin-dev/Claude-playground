@@ -1,98 +1,108 @@
-import { fbm2D } from "./noise.js";
+import { Chunk } from "./chunk.js";
 import { BLOCKS, isSolid } from "./blocks.js";
 
-const WATER_LEVEL = 10;
+const DEFAULT_CHUNK_SIZE = 16;
+const DEFAULT_CHUNK_HEIGHT = 48;
 
+function rleEncode(typedArray) {
+  const runs = [];
+  let current = typedArray[0];
+  let count = 0;
+  for (let i = 0; i < typedArray.length; i++) {
+    if (typedArray[i] === current) {
+      count++;
+    } else {
+      runs.push(current, count);
+      current = typedArray[i];
+      count = 1;
+    }
+  }
+  runs.push(current, count);
+  return runs;
+}
+
+function rleDecodeInto(typedArray, runs) {
+  let i = 0;
+  for (let r = 0; r < runs.length; r += 2) {
+    typedArray.fill(runs[r], i, i + runs[r + 1]);
+    i += runs[r + 1];
+  }
+}
+
+/**
+ * A chunk-streaming voxel world: chunks are generated on demand (and kept
+ * resident once generated, so edits are never lost while the session
+ * runs) and terrain is deterministic from (seed, chunk coords) alone, so
+ * the world is effectively unbounded in x/z. Only chunks a player has
+ * edited need to be saved — everything else regenerates identically from
+ * the seed.
+ */
 class World {
-  constructor(width, height, depth) {
-    this.width = width;
-    this.height = height; // vertical
-    this.depth = depth;
-    this.blocks = new Uint8Array(width * height * depth);
+  constructor(seed, { chunkSize = DEFAULT_CHUNK_SIZE, chunkHeight = DEFAULT_CHUNK_HEIGHT, autoGenerate = true } = {}) {
+    this.seed = seed;
+    this.chunkSize = chunkSize;
+    this.chunkHeight = chunkHeight;
+    this.autoGenerate = autoGenerate;
+    this.chunks = new Map();
   }
 
-  inBounds(x, y, z) {
-    return x >= 0 && x < this.width && y >= 0 && y < this.height && z >= 0 && z < this.depth;
+  chunkKey(cx, cz) {
+    return `${cx},${cz}`;
   }
 
-  index(x, y, z) {
-    return x + z * this.width + y * this.width * this.depth;
+  worldToChunkCoords(x, z) {
+    return { cx: Math.floor(x / this.chunkSize), cz: Math.floor(z / this.chunkSize) };
+  }
+
+  getChunk(cx, cz) {
+    return this.chunks.get(this.chunkKey(cx, cz));
+  }
+
+  getOrCreateChunk(cx, cz) {
+    const key = this.chunkKey(cx, cz);
+    let chunk = this.chunks.get(key);
+    if (!chunk) {
+      chunk = new Chunk(cx, cz, this.chunkSize, this.chunkHeight);
+      if (this.autoGenerate) chunk.generate(this.seed);
+      this.chunks.set(key, chunk);
+    }
+    return chunk;
   }
 
   getBlock(x, y, z) {
     x = Math.floor(x);
     y = Math.floor(y);
     z = Math.floor(z);
-    if (!this.inBounds(x, y, z)) return BLOCKS.AIR;
-    return this.blocks[this.index(x, y, z)];
+    if (y < 0 || y >= this.chunkHeight) return BLOCKS.AIR;
+    const { cx, cz } = this.worldToChunkCoords(x, z);
+    const chunk = this.getOrCreateChunk(cx, cz);
+    return chunk.getBlock(x - cx * this.chunkSize, y, z - cz * this.chunkSize);
   }
 
-  /** Returns false (no-op) for an out-of-bounds coordinate, true otherwise. */
+  /**
+   * Sets a block and returns the chunk coordinates whose mesh may need
+   * rebuilding: the edited chunk, plus any neighbor sharing the edited
+   * cell's face (a block on a chunk boundary changes what faces the
+   * neighboring chunk should draw too). Empty array if y is out of range.
+   */
   setBlock(x, y, z, id) {
-    if (!this.inBounds(x, y, z)) return false;
-    this.blocks[this.index(x, y, z)] = id;
-    return true;
-  }
+    x = Math.floor(x);
+    y = Math.floor(y);
+    z = Math.floor(z);
+    if (y < 0 || y >= this.chunkHeight) return [];
+    const { cx, cz } = this.worldToChunkCoords(x, z);
+    const chunk = this.getOrCreateChunk(cx, cz);
+    const lx = x - cx * this.chunkSize;
+    const lz = z - cz * this.chunkSize;
+    chunk.setBlock(lx, y, lz, id);
+    chunk.dirty = true;
 
-  heightAt(x, z, seed) {
-    const n = fbm2D(x, z, seed, { octaves: 4, persistence: 0.5, lacunarity: 2, scale: 0.02 });
-    return Math.floor(n * (this.height - WATER_LEVEL - 6)) + WATER_LEVEL + 2;
-  }
-
-  generate(seed = 1) {
-    for (let x = 0; x < this.width; x++) {
-      for (let z = 0; z < this.depth; z++) {
-        const surface = Math.min(this.heightAt(x, z, seed), this.height - 1);
-        for (let y = 0; y < this.height; y++) {
-          let id = BLOCKS.AIR;
-          if (y === 0) {
-            id = BLOCKS.BEDROCK;
-          } else if (y < surface - 3) {
-            id = BLOCKS.STONE;
-          } else if (y < surface) {
-            id = BLOCKS.DIRT;
-          } else if (y === surface) {
-            id = surface <= WATER_LEVEL ? BLOCKS.SAND : BLOCKS.GRASS;
-          } else if (y <= WATER_LEVEL) {
-            id = BLOCKS.WATER;
-          }
-          this.blocks[this.index(x, y, z)] = id;
-        }
-      }
-    }
-    this._scatterTrees(seed);
-    return this;
-  }
-
-  _scatterTrees(seed) {
-    for (let x = 2; x < this.width - 2; x++) {
-      for (let z = 2; z < this.depth - 2; z++) {
-        const surface = Math.min(this.heightAt(x, z, seed), this.height - 1);
-        if (surface <= WATER_LEVEL) continue;
-        if (this.getBlock(x, surface, z) !== BLOCKS.GRASS) continue;
-        const roll = fbm2D(x, z, seed + 9999, { octaves: 1, scale: 1 });
-        if (roll < 0.965) continue;
-        this._plantTree(x, surface + 1, z);
-      }
-    }
-  }
-
-  _plantTree(x, baseY, z) {
-    const trunkHeight = 3 + ((x * 31 + z * 17) % 2);
-    for (let i = 0; i < trunkHeight; i++) this.setBlock(x, baseY + i, z, BLOCKS.WOOD);
-    const canopyY = baseY + trunkHeight;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dz = -2; dz <= 2; dz++) {
-          if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-          const y = canopyY + dy;
-          if (!this.inBounds(x + dx, y, z + dz)) continue;
-          if (this.getBlock(x + dx, y, z + dz) === BLOCKS.AIR) {
-            this.setBlock(x + dx, y, z + dz, BLOCKS.LEAVES);
-          }
-        }
-      }
-    }
+    const affected = [{ cx, cz }];
+    if (lx === 0) affected.push({ cx: cx - 1, cz });
+    if (lx === this.chunkSize - 1) affected.push({ cx: cx + 1, cz });
+    if (lz === 0) affected.push({ cx, cz: cz - 1 });
+    if (lz === this.chunkSize - 1) affected.push({ cx, cz: cz + 1 });
+    return affected;
   }
 
   /**
@@ -153,35 +163,26 @@ class World {
     return null;
   }
 
-  /** Run-length encoded snapshot, compact for mostly-uniform terrain. */
+  /** Only edited ("dirty") chunks are saved; everything else regenerates identically from the seed. */
   serialize() {
-    const runs = [];
-    let current = this.blocks[0];
-    let count = 0;
-    for (let i = 0; i < this.blocks.length; i++) {
-      if (this.blocks[i] === current) {
-        count++;
-      } else {
-        runs.push(current, count);
-        current = this.blocks[i];
-        count = 1;
-      }
+    const dirtyChunks = [];
+    for (const chunk of this.chunks.values()) {
+      if (!chunk.dirty) continue;
+      dirtyChunks.push({ cx: chunk.cx, cz: chunk.cz, runs: rleEncode(chunk.blocks) });
     }
-    runs.push(current, count);
-    return { width: this.width, height: this.height, depth: this.depth, runs };
+    return { seed: this.seed, chunkSize: this.chunkSize, chunkHeight: this.chunkHeight, dirtyChunks };
   }
 
   static deserialize(data) {
-    const world = new World(data.width, data.height, data.depth);
-    let i = 0;
-    for (let r = 0; r < data.runs.length; r += 2) {
-      const id = data.runs[r];
-      const count = data.runs[r + 1];
-      world.blocks.fill(id, i, i + count);
-      i += count;
+    const world = new World(data.seed, { chunkSize: data.chunkSize, chunkHeight: data.chunkHeight });
+    for (const saved of data.dirtyChunks) {
+      const chunk = new Chunk(saved.cx, saved.cz, data.chunkSize, data.chunkHeight);
+      rleDecodeInto(chunk.blocks, saved.runs);
+      chunk.dirty = true;
+      world.chunks.set(world.chunkKey(saved.cx, saved.cz), chunk);
     }
     return world;
   }
 }
 
-export { World, WATER_LEVEL };
+export { World };

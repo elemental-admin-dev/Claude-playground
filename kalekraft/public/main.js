@@ -1,15 +1,14 @@
 import * as THREE from "three";
 import { World } from "./world.js";
-import { buildMeshData } from "./mesh.js";
+import { buildChunkMeshData } from "./mesh.js";
 import { BLOCKS, BLOCK_INFO, HOTBAR_BLOCKS } from "./blocks.js";
 import { createPlayer, stepPlayer, EYE_OFFSET } from "./player.js";
 
-const WORLD_WIDTH = 48;
-const WORLD_HEIGHT = 32;
-const WORLD_DEPTH = 48;
-const SAVE_KEY = "kalekraft-save-v1";
+const SAVE_KEY = "kalekraft-save-v2";
 const REACH = 6;
 const MOUSE_SENSITIVITY = 0.0022;
+const RENDER_DISTANCE = 5; // chunks (radius)
+const CHUNKS_PER_FRAME = 2; // budget so entering a new area doesn't stall a frame
 
 // ---------------------------------------------------------------- world/save
 
@@ -26,16 +25,16 @@ function loadSave() {
 }
 
 function findSpawn(world) {
-  const cx = Math.floor(world.width / 2);
-  const cz = Math.floor(world.depth / 2);
-  for (let y = world.height - 1; y > 0; y--) {
-    if (world.getBlock(cx, y, cz) !== BLOCKS.AIR) return { x: cx + 0.5, y: y + 1, z: cz + 0.5 };
+  const wx = 8;
+  const wz = 8;
+  for (let y = world.chunkHeight - 1; y > 0; y--) {
+    if (world.getBlock(wx, y, wz) !== BLOCKS.AIR) return { x: wx + 0.5, y: y + 1, z: wz + 0.5 };
   }
-  return { x: cx + 0.5, y: world.height - 1, z: cz + 0.5 };
+  return { x: wx + 0.5, y: world.chunkHeight - 1, z: wz + 0.5 };
 }
 
 const saved = loadSave();
-let world = saved?.world ?? new World(WORLD_WIDTH, WORLD_HEIGHT, WORLD_DEPTH).generate(Math.floor(Math.random() * 1e9));
+let world = saved?.world ?? new World(Math.floor(Math.random() * 1e9));
 let player = createPlayer(0, 0, 0);
 if (saved?.player) {
   Object.assign(player, saved.player);
@@ -58,9 +57,9 @@ function persist() {
 function newWorld() {
   if (!confirm("Discard this world and generate a new one?")) return;
   localStorage.removeItem(SAVE_KEY);
-  world = new World(WORLD_WIDTH, WORLD_HEIGHT, WORLD_DEPTH).generate(Math.floor(Math.random() * 1e9));
+  world = new World(Math.floor(Math.random() * 1e9));
   Object.assign(player, findSpawn(world), { vx: 0, vy: 0, vz: 0 });
-  rebuildMeshes();
+  resetChunkStreaming();
 }
 
 // -------------------------------------------------------------------- scene
@@ -71,7 +70,8 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 24, 60);
+const fogFar = RENDER_DISTANCE * world.chunkSize * 0.92;
+scene.fog = new THREE.Fog(0x87ceeb, fogFar * 0.45, fogFar);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
 camera.rotation.order = "YXZ";
@@ -89,9 +89,6 @@ const waterMaterial = new THREE.MeshLambertMaterial({
   opacity: 0.75,
 });
 
-let opaqueMesh = null;
-let waterMesh = null;
-
 function bucketToGeometry(bucket) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(bucket.positions, 3));
@@ -101,21 +98,95 @@ function bucketToGeometry(bucket) {
   return geometry;
 }
 
-function rebuildMeshes() {
-  if (opaqueMesh) {
-    scene.remove(opaqueMesh);
-    opaqueMesh.geometry.dispose();
-  }
-  if (waterMesh) {
-    scene.remove(waterMesh);
-    waterMesh.geometry.dispose();
-  }
-  const { opaque, water } = buildMeshData(world);
-  opaqueMesh = new THREE.Mesh(bucketToGeometry(opaque), opaqueMaterial);
-  waterMesh = new THREE.Mesh(bucketToGeometry(water), waterMaterial);
-  scene.add(opaqueMesh, waterMesh);
+// ------------------------------------------------------------ chunk streaming
+//
+// Chunks stream in/out around the player as they move: meshed chunks within
+// RENDER_DISTANCE stay in the scene, others get unmeshed (their voxel data
+// stays cached in `world`, so re-entering an area just remeshes it — no
+// regeneration, no lost edits). New chunks are meshed a few per frame so
+// crossing into unexplored territory doesn't stall.
+
+const chunkMeshes = new Map(); // "cx,cz" -> { opaqueMesh, waterMesh }
+let pendingChunkQueue = [];
+let lastPlayerChunk = null;
+
+function chunkKeyOf(cx, cz) {
+  return `${cx},${cz}`;
 }
-rebuildMeshes();
+
+function meshChunk(cx, cz) {
+  const { opaque, water } = buildChunkMeshData(world, cx, cz);
+  const opaqueMesh = new THREE.Mesh(bucketToGeometry(opaque), opaqueMaterial);
+  const waterMesh = new THREE.Mesh(bucketToGeometry(water), waterMaterial);
+  scene.add(opaqueMesh, waterMesh);
+  const key = chunkKeyOf(cx, cz);
+  const existing = chunkMeshes.get(key);
+  if (existing) {
+    scene.remove(existing.opaqueMesh, existing.waterMesh);
+    existing.opaqueMesh.geometry.dispose();
+    existing.waterMesh.geometry.dispose();
+  }
+  chunkMeshes.set(key, { opaqueMesh, waterMesh });
+}
+
+function unmeshChunk(cx, cz) {
+  const key = chunkKeyOf(cx, cz);
+  const existing = chunkMeshes.get(key);
+  if (!existing) return;
+  scene.remove(existing.opaqueMesh, existing.waterMesh);
+  existing.opaqueMesh.geometry.dispose();
+  existing.waterMesh.geometry.dispose();
+  chunkMeshes.delete(key);
+}
+
+function remeshIfLoaded(cx, cz) {
+  if (chunkMeshes.has(chunkKeyOf(cx, cz))) meshChunk(cx, cz);
+}
+
+function resetChunkStreaming() {
+  for (const key of [...chunkMeshes.keys()]) {
+    const [cx, cz] = key.split(",").map(Number);
+    unmeshChunk(cx, cz);
+  }
+  pendingChunkQueue = [];
+  lastPlayerChunk = null;
+}
+
+function updateChunkStreaming() {
+  const { cx: pcx, cz: pcz } = world.worldToChunkCoords(player.x, player.z);
+  if (lastPlayerChunk && lastPlayerChunk.cx === pcx && lastPlayerChunk.cz === pcz) return;
+  lastPlayerChunk = { cx: pcx, cz: pcz };
+
+  const desired = new Set();
+  const candidates = [];
+  const r2 = RENDER_DISTANCE * RENDER_DISTANCE;
+  for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
+    for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
+      if (dx * dx + dz * dz > r2) continue;
+      const cx = pcx + dx;
+      const cz = pcz + dz;
+      desired.add(chunkKeyOf(cx, cz));
+      candidates.push({ cx, cz, dist: dx * dx + dz * dz });
+    }
+  }
+  candidates.sort((a, b) => a.dist - b.dist);
+  pendingChunkQueue = candidates.filter((c) => !chunkMeshes.has(chunkKeyOf(c.cx, c.cz)));
+
+  for (const key of [...chunkMeshes.keys()]) {
+    if (!desired.has(key)) {
+      const [cx, cz] = key.split(",").map(Number);
+      unmeshChunk(cx, cz);
+    }
+  }
+}
+
+function processChunkQueue() {
+  let budget = CHUNKS_PER_FRAME;
+  while (budget-- > 0 && pendingChunkQueue.length > 0) {
+    const { cx, cz } = pendingChunkQueue.shift();
+    meshChunk(cx, cz);
+  }
+}
 
 // block-highlight wireframe, shown over whatever block the player is looking at
 const highlightGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002));
@@ -191,8 +262,8 @@ function currentTarget() {
 function breakBlock() {
   const hit = currentTarget();
   if (!hit) return;
-  world.setBlock(hit.x, hit.y, hit.z, BLOCKS.AIR);
-  rebuildMeshes();
+  const affected = world.setBlock(hit.x, hit.y, hit.z, BLOCKS.AIR);
+  for (const { cx, cz } of affected) remeshIfLoaded(cx, cz);
 }
 
 function placeBlock() {
@@ -200,8 +271,8 @@ function placeBlock() {
   if (!hit) return;
   const { place } = hit;
   if (intersectsPlayer(place.x, place.y, place.z)) return;
-  world.setBlock(place.x, place.y, place.z, selectedBlock);
-  rebuildMeshes();
+  const affected = world.setBlock(place.x, place.y, place.z, selectedBlock);
+  for (const { cx, cz } of affected) remeshIfLoaded(cx, cz);
 }
 
 function intersectsPlayer(bx, by, bz) {
@@ -254,6 +325,9 @@ function animate(now) {
   requestAnimationFrame(animate);
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
+
+  updateChunkStreaming();
+  processChunkQueue();
 
   if (document.pointerLockElement === canvas) {
     const forward = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);

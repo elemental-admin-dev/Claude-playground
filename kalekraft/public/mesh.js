@@ -39,27 +39,38 @@ function finalize(bucket) {
 
 /**
  * Builds plain typed-array mesh data (positions/normals/colors/indices) for
- * the world's visible faces, split into opaque and water buckets. Pure and
- * WebGL-free so it's cheap to unit test; the renderer wraps the result in a
- * THREE.BufferGeometry.
+ * one chunk's visible faces, split into opaque and water buckets. Vertices
+ * use absolute world coordinates, so the resulting mesh needs no transform.
+ * Queries world.getBlock (not the chunk directly) so faces on a chunk
+ * boundary are correctly culled against the neighboring chunk — which may
+ * generate that neighbor on demand as a side effect.
+ *
+ * Pure and WebGL-free so it's cheap to unit test; the renderer wraps the
+ * result in a THREE.BufferGeometry.
  */
-function buildMeshData(world) {
+function buildChunkMeshData(world, cx, cz) {
   const opaque = emptyBucket();
   const water = emptyBucket();
+  const { chunkSize: size, chunkHeight: height } = world;
+  const originX = cx * size;
+  const originZ = cz * size;
 
-  for (let x = 0; x < world.width; x++) {
-    for (let y = 0; y < world.height; y++) {
-      for (let z = 0; z < world.depth; z++) {
-        const id = world.getBlock(x, y, z);
+  for (let lx = 0; lx < size; lx++) {
+    for (let ly = 0; ly < height; ly++) {
+      for (let lz = 0; lz < size; lz++) {
+        const wx = originX + lx;
+        const wy = ly;
+        const wz = originZ + lz;
+        const id = world.getBlock(wx, wy, wz);
         if (id === 0) continue;
         const info = BLOCK_INFO[id];
         const bucket = info.transparent ? water : opaque;
 
         for (const face of FACES) {
-          const neighborId = world.getBlock(x + face.dir[0], y + face.dir[1], z + face.dir[2]);
+          const neighborId = world.getBlock(wx + face.dir[0], wy + face.dir[1], wz + face.dir[2]);
           if (isOpaque(neighborId)) continue;
           if (neighborId === id) continue;
-          addFace(bucket, x, y, z, face, info.color);
+          addFace(bucket, wx, wy, wz, face, info.color);
         }
       }
     }
@@ -68,4 +79,4 @@ function buildMeshData(world) {
   return { opaque: finalize(opaque), water: finalize(water) };
 }
 
-export { buildMeshData, FACES };
+export { buildChunkMeshData, FACES };
