@@ -2,8 +2,9 @@
 
 A small browser voxel sandbox — not Minecraft (trademark reasons, and
 scope), but the same idea in miniature: procedurally generated terrain,
-first-person movement with gravity and collision, and the ability to break
-and place blocks, rendered with Three.js.
+first-person movement with gravity and collision, and gathering and placing
+blocks (break one to add it to your inventory, spend one to place it),
+rendered with Three.js.
 
 ## Run
 
@@ -22,13 +23,16 @@ you're in.
 | `WASD` | Move |
 | `Space` | Jump |
 | Mouse | Look |
-| Left click | Break the targeted block |
-| Right click | Place the selected block |
+| Left click | Break the targeted block (adds it to your inventory) |
+| Right click | Place the selected block (costs one from your inventory) |
 | `1`-`6` | Select a hotbar block |
 | `Esc` | Release the mouse (auto-saves) |
 | `N` | Discard the world and generate a new one |
 
-The world autosaves to `localStorage` every 15 seconds and whenever you
+You start with nothing — break blocks to collect them. Each hotbar slot
+shows how many of that block you're carrying; an empty slot (dimmed, no
+count) can't be placed until you gather more. The world (including your
+inventory) autosaves to `localStorage` every 15 seconds and whenever you
 release the pointer, so reloading the page resumes where you left off.
 
 ## How it works
@@ -74,6 +78,9 @@ meshes, not the whole world.
   Doesn't touch Three.js or WebGL, so it's fully unit-testable.
 - `player.js` — pure physics: gravity, jumping, and axis-separated AABB vs.
   voxel collision.
+- `inventory.js` — a simple per-block-id item count: breaking adds one,
+  placing costs one (and refuses if you don't have one). Serializable, so
+  it saves and loads with the rest of the world.
 - `main.js` — the only file that isn't unit tested: Three.js scene/camera
   setup, pointer-lock mouse look, keyboard input, the render loop, the
   chunk streaming manager (mesh chunks within render distance a few per
@@ -93,17 +100,16 @@ npm test
 Runs unit tests (`node --test`) for noise, terrain rules, chunk-aware world
 generation/raycasting (including determinism across chunk and negative
 coordinates, and boundary-straddling trees), procedural textures, mesh
-face-culling and UV mapping, and player physics — the entire simulation
-core, with no browser or WebGL required.
+face-culling and UV mapping, inventory accounting, and player physics —
+the entire simulation core, with no browser or WebGL required.
 
 ## Limitations
 
-This is a tech-demo scale sandbox, not a game: no multiplayer, no
-crafting/inventory (the hotbar is unlimited), and no mobs. Anything taller
-than a single block (a tree trunk, a cliff face) still fully blocks walking
-into it — jump over it or go around; single-block ledges auto-step. The
-world itself is no longer
-the limiting factor: chunks stream in as you
+This is a tech-demo scale sandbox, not a game: no crafting (raw blocks
+only, no recipes), no mobs, and no multiplayer. Anything taller than a
+single block (a tree trunk, a cliff face) still fully blocks walking into
+it — jump over it or go around; single-block ledges auto-step. The world
+itself is no longer the limiting factor: chunks stream in as you
 walk, generation and re-meshing are budgeted per frame, editing only
 rebuilds the touched chunk(s), and unedited chunks far from the player are
 evicted from memory (an edited chunk never is, since there's nowhere else

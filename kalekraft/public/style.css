@@ -48,6 +48,7 @@ html, body {
 }
 
 .slot {
+  position: relative;
   width: 42px;
   height: 42px;
   border-radius: 6px;
@@ -65,11 +66,32 @@ html, body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+.slot.empty {
+  opacity: 0.45;
+}
+
 .slot .swatch {
   width: 20px;
   height: 20px;
   border-radius: 3px;
   border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.slot .slot-key {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.slot .slot-count {
+  position: absolute;
+  bottom: 1px;
+  right: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 #overlay {

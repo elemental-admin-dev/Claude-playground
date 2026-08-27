@@ -4,8 +4,9 @@ import { buildChunkMeshData } from "./mesh.js";
 import { BLOCKS, BLOCK_INFO, HOTBAR_BLOCKS } from "./blocks.js";
 import { createPlayer, stepPlayer, EYE_OFFSET } from "./player.js";
 import { KINDS, TILE_SIZE, pixelColor } from "./textures.js";
+import { Inventory } from "./inventory.js";
 
-const SAVE_KEY = "kalekraft-save-v2";
+const SAVE_KEY = "kalekraft-save-v3";
 const REACH = 6;
 const MOUSE_SENSITIVITY = 0.0022;
 const RENDER_DISTANCE = 5; // chunks (radius)
@@ -22,7 +23,11 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    return { world: World.deserialize(data.world), player: data.player ?? null };
+    return {
+      world: World.deserialize(data.world),
+      player: data.player ?? null,
+      inventory: Inventory.deserialize(data.inventory),
+    };
   } catch (err) {
     console.warn("kalekraft: failed to load save, starting fresh", err);
     return null;
@@ -48,9 +53,10 @@ if (saved?.player) {
 }
 let yaw = saved?.player?.yaw ?? 0;
 let pitch = saved?.player?.pitch ?? 0;
+let inventory = saved?.inventory ?? new Inventory();
 
 function persist() {
-  const data = { world: world.serialize(), player: { ...player, yaw, pitch } };
+  const data = { world: world.serialize(), player: { ...player, yaw, pitch }, inventory: inventory.serialize() };
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     flashSaveStatus("saved");
@@ -64,6 +70,8 @@ function newWorld() {
   localStorage.removeItem(SAVE_KEY);
   world = new World(Math.floor(Math.random() * 1e9));
   Object.assign(player, findSpawn(world), { vx: 0, vy: 0, vz: 0 });
+  inventory = new Inventory();
+  updateHotbarCounts();
   resetChunkStreaming();
 }
 
@@ -301,17 +309,23 @@ function currentTarget() {
 function breakBlock() {
   const hit = currentTarget();
   if (!hit) return;
+  const brokenId = world.getBlock(hit.x, hit.y, hit.z);
   const affected = world.setBlock(hit.x, hit.y, hit.z, BLOCKS.AIR);
   for (const { cx, cz } of affected) remeshIfLoaded(cx, cz);
+  inventory.add(brokenId, 1);
+  updateHotbarCounts();
 }
 
 function placeBlock() {
+  if (!inventory.has(selectedBlock, 1)) return;
   const hit = currentTarget();
   if (!hit) return;
   const { place } = hit;
   if (intersectsPlayer(place.x, place.y, place.z)) return;
+  inventory.remove(selectedBlock, 1);
   const affected = world.setBlock(place.x, place.y, place.z, selectedBlock);
   for (const { cx, cz } of affected) remeshIfLoaded(cx, cz);
+  updateHotbarCounts();
 }
 
 function intersectsPlayer(bx, by, bz) {
@@ -324,6 +338,7 @@ function intersectsPlayer(bx, by, bz) {
 // ------------------------------------------------------------------- hotbar
 
 const hotbar = document.getElementById("hotbar");
+const countElements = [];
 const slotElements = HOTBAR_BLOCKS.map((id, i) => {
   const slot = document.createElement("div");
   slot.className = "slot";
@@ -334,11 +349,12 @@ const slotElements = HOTBAR_BLOCKS.map((id, i) => {
   slot.appendChild(swatch);
   const label = document.createElement("div");
   label.textContent = String(i + 1);
-  label.style.position = "absolute";
-  label.style.fontSize = "0.55rem";
-  label.style.marginTop = "-30px";
-  slot.style.position = "relative";
+  label.className = "slot-key";
   slot.appendChild(label);
+  const count = document.createElement("div");
+  count.className = "slot-count";
+  slot.appendChild(count);
+  countElements.push(count);
   slot.addEventListener("click", () => selectBlock(id));
   hotbar.appendChild(slot);
   return slot;
@@ -350,6 +366,15 @@ function selectBlock(id) {
   slotElements.forEach((el, i) => el.classList.toggle("active", i === index));
 }
 selectBlock(selectedBlock);
+
+function updateHotbarCounts() {
+  HOTBAR_BLOCKS.forEach((id, i) => {
+    const n = inventory.count(id);
+    countElements[i].textContent = n > 0 ? String(n) : "";
+    slotElements[i].classList.toggle("empty", n === 0);
+  });
+}
+updateHotbarCounts();
 
 // --------------------------------------------------------------------- loop
 
