@@ -3,8 +3,10 @@
 A small browser voxel sandbox — not Minecraft (trademark reasons, and
 scope), but the same idea in miniature: procedurally generated terrain
 with a few wandering passive mobs, first-person movement with gravity and
-collision, and gathering and placing blocks (break one to add it to your
-inventory, spend one to place it), rendered with Three.js.
+collision, gathering and placing blocks (break one to add it to your
+inventory, spend one to place it), and a shared multiplayer world — anyone
+who opens the page walks the same terrain and sees the same edits, live.
+Rendered with Three.js.
 
 ## Run
 
@@ -27,13 +29,19 @@ you're in.
 | Right click | Place the selected block (costs one from your inventory) |
 | `1`-`6` | Select a hotbar block |
 | `Esc` | Release the mouse (auto-saves) |
-| `N` | Discard the world and generate a new one |
+| `N` | Discard your local edits and resync to the shared world |
 
 You start with nothing — break blocks to collect them. Each hotbar slot
 shows how many of that block you're carrying; an empty slot (dimmed, no
-count) can't be placed until you gather more. The world (including your
-inventory) autosaves to `localStorage` every 15 seconds and whenever you
-release the pointer, so reloading the page resumes where you left off.
+count) can't be placed until you gather more. Your local view of the world
+(and your inventory) autosaves to `localStorage` every 15 seconds and
+whenever you release the pointer, so reloading the page resumes where you
+left off.
+
+Everyone who loads the page is in the **same world** and sees each other
+as simple blue boxes moving around; breaking or placing a block shows up
+for everyone almost immediately. Open the page in two tabs (or have a
+friend on the same network hit your machine's address) to see it.
 
 ## How it works
 
@@ -47,6 +55,16 @@ cached in memory once generated (so re-entering an area never regenerates
 or loses edits) but are only meshed/rendered within a radius of the
 player; editing a block rebuilds just the one or two affected chunks'
 meshes, not the whole world.
+
+**Multiplayer works because the seed is shared, not because the world is
+synced.** Every client generates identical terrain from the same fixed
+`SHARED_WORLD_SEED`, so the server never needs to hold or transmit any
+terrain — it's a pure relay that forwards two kinds of events between
+clients: block edits (so everyone's `world.setBlock` stays in sync) and
+player positions (for avatars). That's a deliberate, much smaller problem
+than syncing an entire voxel world, and it's why a player who joins
+mid-session won't see edits made before they connected — the server never
+recorded them, only relayed them live.
 
 - `noise.js` — deterministic seeded 2D value noise + fBm, used for terrain
   heightmaps. No external noise library.
@@ -92,13 +110,17 @@ meshes, not the whole world.
   setup, pointer-lock mouse look, keyboard input, the render loop, the
   chunk streaming manager (mesh chunks within render distance a few per
   frame, unmesh — not discard — the rest as the player moves), spawning
-  and rendering mobs as simple colored boxes, hotbar UI, and localStorage
-  persistence. It's a thin wrapper around the modules above. Mobs
-  themselves aren't saved — they're ambient wildlife, not player state, so
-  a fresh batch spawns near the player each time the page loads.
-- `server.js` — Express serving `public/` as static files, plus Three's
-  module build so the client can `import "three"` via an import map with no
-  bundler or CDN dependency.
+  and rendering mobs as simple colored boxes, hotbar UI, localStorage
+  persistence, and the multiplayer WebSocket connection (sending edits/
+  position, applying incoming edits, rendering other players as blue
+  boxes). It's a thin wrapper around the modules above. Mobs themselves
+  aren't saved or synced — they're ambient wildlife, not shared state, so
+  a fresh batch spawns near each player independently on load.
+- `server.js` — Express serving `public/` as static files (plus Three's
+  module build, so the client can `import "three"` via an import map with
+  no bundler or CDN dependency) and a `ws` WebSocket server that relays
+  edit/move/leave events between connected clients — see the multiplayer
+  note above for why it holds no world state of its own.
 
 ## Test
 
@@ -116,9 +138,13 @@ rng) — the entire simulation core, with no browser or WebGL required.
 ## Limitations
 
 This is a tech-demo scale sandbox, not a game: no crafting (raw blocks
-only, no recipes), no multiplayer, and mobs are purely decorative — they
-wander, nothing more (no interaction with the player, each other, or
-combat). Anything taller than a
+only, no recipes), and mobs are purely decorative and unsynced — each
+client's mobs wander independently, with no interaction with the player,
+each other, or combat. Multiplayer is real but intentionally minimal: no
+catch-up sync for late joiners (see above), no chat, no player-vs-player
+interaction beyond seeing each other move, remote avatars snap to each
+position update rather than interpolating (choppy at the ~10Hz broadcast
+rate), and inventories are per-client, not shared. Anything taller than a
 single block (a tree trunk, a cliff face) still fully blocks walking into
 it — jump over it or go around; single-block ledges auto-step. The world
 itself is no longer the limiting factor: chunks stream in as you

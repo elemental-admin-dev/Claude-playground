@@ -6,8 +6,9 @@ import { createPlayer, stepPlayer, EYE_OFFSET } from "./player.js";
 import { KINDS, TILE_SIZE, pixelColor } from "./textures.js";
 import { Inventory } from "./inventory.js";
 import { createMob, stepMob, HALF_WIDTH as MOB_HALF_WIDTH, HEIGHT as MOB_HEIGHT } from "./mob.js";
+import { HALF_WIDTH as PLAYER_HALF_WIDTH, HEIGHT as PLAYER_HEIGHT } from "./player.js";
 
-const SAVE_KEY = "kalekraft-save-v3";
+const SAVE_KEY = "kalekraft-save-v4";
 const REACH = 6;
 const MOUSE_SENSITIVITY = 0.0022;
 const RENDER_DISTANCE = 5; // chunks (radius)
@@ -18,6 +19,10 @@ const MOB_SPAWN_RADIUS = 12; // blocks, around the player's spawn point
 // halo past it) so a chunk isn't evicted and immediately regenerated as the
 // player wanders back and forth near the render-distance edge.
 const EVICT_DISTANCE = RENDER_DISTANCE + 3;
+// Fixed (not random) so every client generates identical terrain and the
+// world is genuinely shared — see server.js for what that trades away.
+const SHARED_WORLD_SEED = 1337;
+const MOVE_BROADCAST_MS = 100; // ~10Hz
 
 // ---------------------------------------------------------------- world/save
 
@@ -66,7 +71,7 @@ function spawnMobs(world, center) {
 }
 
 const saved = loadSave();
-let world = saved?.world ?? new World(Math.floor(Math.random() * 1e9));
+let world = saved?.world ?? new World(SHARED_WORLD_SEED);
 let player = createPlayer(0, 0, 0);
 if (saved?.player) {
   Object.assign(player, saved.player);
@@ -89,9 +94,9 @@ function persist() {
 }
 
 function newWorld() {
-  if (!confirm("Discard this world and generate a new one?")) return;
+  if (!confirm("Discard your local edits and resync to the shared world?")) return;
   localStorage.removeItem(SAVE_KEY);
-  world = new World(Math.floor(Math.random() * 1e9));
+  world = new World(SHARED_WORLD_SEED);
   Object.assign(player, findSpawn(world), { vx: 0, vy: 0, vz: 0 });
   inventory = new Inventory();
   updateHotbarCounts();
@@ -291,6 +296,76 @@ function updateMobs(dt) {
   });
 }
 
+// -------------------------------------------------------------- multiplayer
+//
+// Every client generates identical terrain from SHARED_WORLD_SEED, so the
+// server is a pure relay: it forwards edit/move events between clients and
+// tracks who's connected for avatar placement. A player who joins mid-
+// session won't see edits made before they connected — see the README.
+
+const remotePlayerGeometry = new THREE.BoxGeometry(PLAYER_HALF_WIDTH * 2, PLAYER_HEIGHT, PLAYER_HALF_WIDTH * 2);
+const remotePlayerMaterial = new THREE.MeshLambertMaterial({ color: 0x4aa3d9 });
+const remotePlayers = new Map(); // playerId -> { mesh, x, y, z, yaw }
+let myPlayerId = null;
+let ws = null;
+let lastMoveSentAt = 0;
+
+function upsertRemotePlayer(id, x, y, z, yaw) {
+  let entry = remotePlayers.get(id);
+  if (!entry) {
+    const mesh = new THREE.Mesh(remotePlayerGeometry, remotePlayerMaterial);
+    scene.add(mesh);
+    entry = { mesh };
+    remotePlayers.set(id, entry);
+  }
+  entry.mesh.position.set(x, y + PLAYER_HEIGHT / 2, z);
+  entry.mesh.rotation.y = yaw;
+}
+
+function removeRemotePlayer(id) {
+  const entry = remotePlayers.get(id);
+  if (!entry) return;
+  scene.remove(entry.mesh);
+  remotePlayers.delete(id);
+}
+
+function connectMultiplayer() {
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${protocol}//${location.host}`);
+
+  ws.addEventListener("message", (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === "init") {
+      myPlayerId = msg.playerId;
+      for (const p of msg.others) upsertRemotePlayer(p.id, p.x, p.y, p.z, p.yaw);
+    } else if (msg.type === "move") {
+      upsertRemotePlayer(msg.playerId, msg.x, msg.y, msg.z, msg.yaw);
+    } else if (msg.type === "edit") {
+      const affected = world.setBlock(msg.x, msg.y, msg.z, msg.id);
+      for (const { cx, cz } of affected) remeshIfLoaded(cx, cz);
+    } else if (msg.type === "leave") {
+      removeRemotePlayer(msg.playerId);
+    }
+  });
+
+  ws.addEventListener("close", () => {
+    for (const id of [...remotePlayers.keys()]) removeRemotePlayer(id);
+    setTimeout(connectMultiplayer, 2000);
+  });
+}
+connectMultiplayer();
+
+function sendEdit(x, y, z, id) {
+  if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "edit", x, y, z, id }));
+}
+
+function maybeSendMove(now) {
+  if (!ws || ws.readyState !== ws.OPEN) return;
+  if (now - lastMoveSentAt < MOVE_BROADCAST_MS) return;
+  lastMoveSentAt = now;
+  ws.send(JSON.stringify({ type: "move", x: player.x, y: player.y, z: player.z, yaw }));
+}
+
 function resize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -362,6 +437,7 @@ function breakBlock() {
   const brokenId = world.getBlock(hit.x, hit.y, hit.z);
   const affected = world.setBlock(hit.x, hit.y, hit.z, BLOCKS.AIR);
   for (const { cx, cz } of affected) remeshIfLoaded(cx, cz);
+  sendEdit(hit.x, hit.y, hit.z, BLOCKS.AIR);
   inventory.add(brokenId, 1);
   updateHotbarCounts();
 }
@@ -375,6 +451,7 @@ function placeBlock() {
   inventory.remove(selectedBlock, 1);
   const affected = world.setBlock(place.x, place.y, place.z, selectedBlock);
   for (const { cx, cz } of affected) remeshIfLoaded(cx, cz);
+  sendEdit(place.x, place.y, place.z, selectedBlock);
   updateHotbarCounts();
 }
 
@@ -443,6 +520,7 @@ function animate(now) {
   updateChunkStreaming();
   processChunkQueue();
   updateMobs(dt);
+  maybeSendMove(now);
 
   if (document.pointerLockElement === canvas) {
     const forward = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);
