@@ -1,0 +1,16 @@
+{
+  "name": "kalekraft",
+  "version": "1.0.0",
+  "description": "A small browser voxel sandbox: procedural terrain, place/break blocks, first-person movement.",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "three": "^0.169.0"
+  }
+}

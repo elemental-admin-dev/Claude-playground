@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kalekraft</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="crosshair"></div>
+
+  <div id="hud">
+    <div id="coords">x=0 y=0 z=0</div>
+    <div id="fps">-- fps</div>
+  </div>
+
+  <div id="hotbar"></div>
+
+  <div id="overlay">
+    <h1>Kalekraft</h1>
+    <p>A small voxel sandbox. Click to play.</p>
+    <ul>
+      <li><b>WASD</b> move &nbsp; <b>Space</b> jump &nbsp; <b>Mouse</b> look</li>
+      <li><b>Left click</b> break &nbsp; <b>Right click</b> place &nbsp; <b>1-6</b> select block</li>
+      <li><b>Esc</b> release mouse &nbsp; <b>N</b> new world</li>
+    </ul>
+    <p id="save-status"></p>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
