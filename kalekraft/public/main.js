@@ -9,6 +9,10 @@ const REACH = 6;
 const MOUSE_SENSITIVITY = 0.0022;
 const RENDER_DISTANCE = 5; // chunks (radius)
 const CHUNKS_PER_FRAME = 2; // budget so entering a new area doesn't stall a frame
+// Comfortably beyond RENDER_DISTANCE (mesh-boundary queries generate ~1 chunk of
+// halo past it) so a chunk isn't evicted and immediately regenerated as the
+// player wanders back and forth near the render-distance edge.
+const EVICT_DISTANCE = RENDER_DISTANCE + 3;
 
 // ---------------------------------------------------------------- world/save
 
@@ -178,6 +182,8 @@ function updateChunkStreaming() {
       unmeshChunk(cx, cz);
     }
   }
+
+  world.evictFarChunks(pcx, pcz, EVICT_DISTANCE);
 }
 
 function processChunkQueue() {

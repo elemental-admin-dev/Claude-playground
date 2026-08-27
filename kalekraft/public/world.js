@@ -69,6 +69,29 @@ class World {
     return chunk;
   }
 
+  /**
+   * Drops cached chunks farther than `keepRadius` (in chunks) from
+   * (centerCx, centerCz), bounding memory as a session explores further and
+   * further. Only ever drops chunks that have never been edited — those
+   * regenerate identically from the seed if revisited. Dirty (edited)
+   * chunks are never evicted, since there's nowhere else their edits are
+   * recorded until the next save. Returns the number of chunks evicted.
+   */
+  evictFarChunks(centerCx, centerCz, keepRadius) {
+    const keepDistSq = keepRadius * keepRadius;
+    let evicted = 0;
+    for (const [key, chunk] of this.chunks) {
+      if (chunk.dirty) continue;
+      const dx = chunk.cx - centerCx;
+      const dz = chunk.cz - centerCz;
+      if (dx * dx + dz * dz > keepDistSq) {
+        this.chunks.delete(key);
+        evicted++;
+      }
+    }
+    return evicted;
+  }
+
   getBlock(x, y, z) {
     x = Math.floor(x);
     y = Math.floor(y);

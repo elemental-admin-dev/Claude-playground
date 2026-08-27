@@ -90,9 +90,13 @@ physics — the entire simulation core, with no browser or WebGL required.
 ## Limitations
 
 This is a tech-demo scale sandbox, not a game: no multiplayer, no
-crafting/inventory/mobs, no textures (flat-shaded per-face colors), and
-loaded chunks are never evicted (memory grows, unbounded, with how far a
-single session explores — fine for a play session, not for a long-running
-server). The world itself is no longer the limiting factor: chunks stream
-in as you walk, generation and re-meshing are budgeted per frame, and
-editing only rebuilds the touched chunk(s).
+crafting/inventory (the hotbar is unlimited), no mobs, no textures
+(flat-shaded per-face colors), and no step-up assist — a single raised
+block (or a low tree branch) fully blocks walking into it; jump over it.
+The world itself is no longer the limiting factor: chunks stream in as you
+walk, generation and re-meshing are budgeted per frame, editing only
+rebuilds the touched chunk(s), and unedited chunks far from the player are
+evicted from memory (an edited chunk never is, since there's nowhere else
+its changes are recorded until the next save) — so memory stays bounded by
+render distance plus wherever you've actually built, not by how far you've
+walked in total.

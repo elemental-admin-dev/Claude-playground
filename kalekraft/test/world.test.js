@@ -139,6 +139,33 @@ test("raycast ignores water (non-solid) and finds the block behind it", () => {
   assert.deepEqual([hit.x, hit.y, hit.z], [4, 5, 5]);
 });
 
+test("evictFarChunks drops unedited chunks beyond keepRadius", () => {
+  const world = new World(1, { chunkSize: 8, chunkHeight: 16 });
+  world.getOrCreateChunk(0, 0);
+  world.getOrCreateChunk(10, 0);
+  const evicted = world.evictFarChunks(0, 0, 2);
+  assert.equal(evicted, 1);
+  assert.equal(world.getChunk(0, 0) !== undefined, true);
+  assert.equal(world.getChunk(10, 0), undefined);
+});
+
+test("evictFarChunks never drops a dirty (edited) chunk, however far", () => {
+  const world = new World(1, { chunkSize: 8, chunkHeight: 16 });
+  world.setBlock(80, 1, 0, BLOCKS.STONE); // far chunk, but edited
+  const evicted = world.evictFarChunks(0, 0, 2);
+  assert.equal(evicted, 0);
+  assert.notEqual(world.getChunk(10, 0), undefined);
+  assert.equal(world.getBlock(80, 1, 0), BLOCKS.STONE);
+});
+
+test("an evicted chunk regenerates identically to before eviction", () => {
+  const world = new World(4, { chunkSize: 8, chunkHeight: 24 });
+  const before = world.getBlock(40, 5, 40);
+  world.evictFarChunks(0, 0, 1);
+  assert.equal(world.getChunk(5, 5), undefined); // confirm it was actually evicted
+  assert.equal(world.getBlock(40, 5, 40), before);
+});
+
 test("raycast finds a block across a chunk boundary", () => {
   const world = blankWorld(4, 10); // chunk size 4, so x=20 is chunk 5, far from origin's chunk 0
   world.setBlock(20, 5, 5, BLOCKS.STONE);
