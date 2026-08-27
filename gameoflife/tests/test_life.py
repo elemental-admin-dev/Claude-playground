@@ -1,9 +1,10 @@
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from life import Board, GLIDER
+from life import Board, GLIDER, PULSAR, PATTERNS, save_pattern, load_pattern, _centered_offset
 
 
 def test_still_life_block_is_stable():
@@ -55,3 +56,31 @@ def test_render_dimensions_match_board_size():
     lines = board.render().splitlines()
     assert len(lines) == 3
     assert all(len(line) == 4 for line in lines)
+
+
+def test_pulsar_is_a_registered_pattern():
+    assert PATTERNS["pulsar"] == PULSAR
+
+
+def test_pulsar_oscillates_with_period_three():
+    board = Board.from_pattern(PULSAR, 20, 20, offset=(2, 2))
+    original = set(board.live_cells)
+    stepped = board.step().step().step()
+    assert stepped.live_cells == original
+
+
+def test_centered_offset_centers_pattern_in_board():
+    ox, oy = _centered_offset(GLIDER, 10, 10)
+    assert ox == 3 and oy == 3  # (10 - 3) // 2 for a 3x3 pattern
+
+
+def test_save_then_load_round_trips_live_cells():
+    board = Board.from_pattern(GLIDER, 10, 10, offset=(1, 1))
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        path = f.name
+    try:
+        save_pattern(board, path)
+        loaded = load_pattern(path, 10, 10)
+        assert loaded.live_cells == board.live_cells
+    finally:
+        os.remove(path)

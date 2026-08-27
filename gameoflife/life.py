@@ -77,14 +77,67 @@ GLIDER = """
 ###
 """
 
-PULSAR_BLINKER = """
+BLINKER = """
 ###
 """
+
+PULSAR = """
+..###...###..
+.............
+#....#.#....#
+#....#.#....#
+#....#.#....#
+..###...###..
+.............
+..###...###..
+#....#.#....#
+#....#.#....#
+#....#.#....#
+.............
+..###...###..
+"""
+
+GOSPER_GLIDER_GUN = """
+........................#............
+......................#.#............
+............##......##............##
+...........#...#....##............##
+##........#.....#...##...............
+##........#...#.##....#.#............
+..........#.....#.......#............
+...........#...#.....................
+............##.......................
+"""
+
+PATTERNS = {
+    "glider": GLIDER,
+    "blinker": BLINKER,
+    "pulsar": PULSAR,
+    "gun": GOSPER_GLIDER_GUN,
+}
+
+
+def save_pattern(board: Board, path: str) -> None:
+    with open(path, "w") as f:
+        f.write(board.render(alive_char="#", dead_char="."))
+        f.write("\n")
+
+
+def load_pattern(path: str, width: int, height: int) -> Board:
+    with open(path) as f:
+        return Board.from_pattern(f.read(), width, height)
 
 
 def _terminal_size(default_width: int = 60, default_height: int = 20) -> tuple[int, int]:
     size = shutil.get_terminal_size(fallback=(default_width, default_height + 2))
     return size.columns, max(size.lines - 2, 5)
+
+
+def _centered_offset(pattern: str, width: int, height: int) -> tuple[int, int]:
+    rows = pattern.strip("\n").splitlines()
+    pattern_h = len(rows)
+    pattern_w = max(len(row) for row in rows)
+    return max((width - pattern_w) // 2, 0), max((height - pattern_h) // 2, 0)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -94,10 +147,11 @@ def run(args: argparse.Namespace) -> None:
         width = width or term_w
         height = height or term_h
 
-    if args.pattern == "glider":
-        board = Board.from_pattern(GLIDER, width, height, offset=(1, 1))
-    elif args.pattern == "blinker":
-        board = Board.from_pattern(PULSAR_BLINKER, width, height, offset=(width // 2 - 1, height // 2))
+    if args.load:
+        board = load_pattern(args.load, width, height)
+    elif args.pattern in PATTERNS:
+        pattern = PATTERNS[args.pattern]
+        board = Board.from_pattern(pattern, width, height, offset=_centered_offset(pattern, width, height))
     else:
         board = Board.random(width, height, density=args.density, seed=args.seed)
 
@@ -118,6 +172,9 @@ def run(args: argparse.Namespace) -> None:
             time.sleep(args.interval)
     except KeyboardInterrupt:
         pass
+    finally:
+        if args.save:
+            save_pattern(board, args.save)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -128,7 +185,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=None, help="random seed")
     parser.add_argument("--interval", type=float, default=0.1, help="seconds between generations")
     parser.add_argument("--generations", type=int, default=None, help="stop after N generations (default: run until stable or interrupted)")
-    parser.add_argument("--pattern", choices=["random", "glider", "blinker"], default="random", help="initial pattern")
+    parser.add_argument("--pattern", choices=["random", *PATTERNS], default="random", help="initial pattern")
+    parser.add_argument("--load", type=str, default=None, help="load initial pattern from a plaintext file (# alive, . dead)")
+    parser.add_argument("--save", type=str, default=None, help="save the final board state to a plaintext file on exit")
     return parser.parse_args(argv)
 
 
