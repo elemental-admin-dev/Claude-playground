@@ -7,6 +7,7 @@ import { KINDS, TILE_SIZE, pixelColor } from "./textures.js";
 import { Inventory } from "./inventory.js";
 import { createMob, stepMob, HALF_WIDTH as MOB_HALF_WIDTH, HEIGHT as MOB_HEIGHT } from "./mob.js";
 import { HALF_WIDTH as PLAYER_HALF_WIDTH, HEIGHT as PLAYER_HEIGHT } from "./player.js";
+import { RECIPES, craft } from "./crafting.js";
 
 const SAVE_KEY = "kalekraft-save-v4";
 const REACH = 6;
@@ -100,6 +101,7 @@ function newWorld() {
   Object.assign(player, findSpawn(world), { vx: 0, vy: 0, vz: 0 });
   inventory = new Inventory();
   updateHotbarCounts();
+  updateCraftingPanel();
   mobs = spawnMobs(world, player);
   rebuildMobMeshes();
   resetChunkStreaming();
@@ -382,6 +384,8 @@ let selectedBlock = HOTBAR_BLOCKS[0];
 window.addEventListener("keydown", (e) => {
   keys.add(e.code);
   if (e.code === "KeyN") newWorld();
+  if (e.code === "KeyC") toggleCraftingPanel();
+  tryCraftFromKey(e.code);
   const digit = Number(e.key);
   if (digit >= 1 && digit <= HOTBAR_BLOCKS.length) selectBlock(HOTBAR_BLOCKS[digit - 1]);
 });
@@ -440,6 +444,7 @@ function breakBlock() {
   sendEdit(hit.x, hit.y, hit.z, BLOCKS.AIR);
   inventory.add(brokenId, 1);
   updateHotbarCounts();
+  updateCraftingPanel();
 }
 
 function placeBlock() {
@@ -453,6 +458,7 @@ function placeBlock() {
   for (const { cx, cz } of affected) remeshIfLoaded(cx, cz);
   sendEdit(place.x, place.y, place.z, selectedBlock);
   updateHotbarCounts();
+  updateCraftingPanel();
 }
 
 function intersectsPlayer(bx, by, bz) {
@@ -502,6 +508,59 @@ function updateHotbarCounts() {
   });
 }
 updateHotbarCounts();
+
+// ----------------------------------------------------------------- crafting
+
+const CRAFT_KEYS = ["KeyZ", "KeyX", "KeyV"]; // one per RECIPES entry, in order
+const craftingPanel = document.getElementById("crafting-panel");
+const craftingList = document.getElementById("crafting-list");
+
+const recipeRows = RECIPES.map((recipe, i) => {
+  const row = document.createElement("div");
+  row.className = "recipe-row";
+
+  const key = document.createElement("span");
+  key.className = "recipe-key";
+  key.textContent = CRAFT_KEYS[i].replace("Key", "");
+  row.appendChild(key);
+
+  const name = document.createElement("span");
+  name.className = "recipe-name";
+  name.textContent = recipe.name;
+  row.appendChild(name);
+
+  const need = document.createElement("span");
+  need.className = "recipe-need";
+  row.appendChild(need);
+
+  craftingList.appendChild(row);
+  return { row, need };
+});
+
+function updateCraftingPanel() {
+  RECIPES.forEach((recipe, i) => {
+    const parts = Object.entries(recipe.inputs).map(([blockId, count]) => {
+      return `${inventory.count(Number(blockId))}/${count}`;
+    });
+    const ready = Object.entries(recipe.inputs).every(([blockId, count]) => inventory.has(Number(blockId), count));
+    recipeRows[i].need.textContent = parts.join(", ");
+    recipeRows[i].row.classList.toggle("ready", ready);
+  });
+}
+updateCraftingPanel();
+
+function toggleCraftingPanel() {
+  craftingPanel.classList.toggle("hidden");
+}
+
+function tryCraftFromKey(code) {
+  const index = CRAFT_KEYS.indexOf(code);
+  if (index === -1) return;
+  if (craft(inventory, RECIPES[index].id)) {
+    updateHotbarCounts();
+    updateCraftingPanel();
+  }
+}
 
 // --------------------------------------------------------------------- loop
 

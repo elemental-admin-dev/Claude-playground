@@ -7,7 +7,19 @@
 import { hash2 } from "./noise.js";
 
 const TILE_SIZE = 16;
-const KINDS = ["stone", "dirt", "sand", "grass-top", "grass-side", "wood-top", "wood-side", "leaves"];
+const KINDS = [
+  "stone",
+  "dirt",
+  "sand",
+  "grass-top",
+  "grass-side",
+  "wood-top",
+  "wood-side",
+  "leaves",
+  "planks",
+  "brick",
+  "glass",
+];
 
 function clampByte(n) {
   return Math.max(0, Math.min(255, Math.round(n)));
@@ -51,6 +63,24 @@ function pixelColor(kind, px, py, size = TILE_SIZE) {
     }
     case "leaves":
       return mix([58, 110, 46], speckle(px, py, 127, 46));
+    case "planks": {
+      const seam = py % 4 === 0 ? -22 : 0; // horizontal board edges
+      const grain = Math.sin(py * 1.3 + hash2(0, Math.floor(py / 2), 131) * 3) * 10;
+      return mix([176, 140, 90], grain + seam + speckle(px, py, 133, 8));
+    }
+    case "brick": {
+      const rowHeight = 4;
+      const brickWidth = 8;
+      const row = Math.floor(py / rowHeight);
+      const offset = (row % 2) * (brickWidth / 2);
+      const isMortar = py % rowHeight === 0 || Math.floor((px + offset) % brickWidth) === 0;
+      if (isMortar) return mix([158, 148, 138], speckle(px, py, 139, 10));
+      return mix([150, 60, 45], speckle(px, py, 141, 20));
+    }
+    case "glass": {
+      const shine = Math.abs((px - py) % size) < 2 ? 25 : 0; // faint diagonal highlight
+      return mix([205, 225, 230], speckle(px, py, 149, 14) + shine);
+    }
     default:
       return [255, 0, 255]; // unmistakable "missing texture" marker
   }

@@ -10,6 +10,9 @@ const BLOCKS = Object.freeze({
   WOOD: 6,
   LEAVES: 7,
   BEDROCK: 8,
+  PLANKS: 9,
+  BRICK: 10,
+  GLASS: 11,
 });
 
 // `textures` names a procedural tile (see textures.js `KINDS`) per face
@@ -59,10 +62,38 @@ const BLOCK_INFO = {
     solid: true,
     textures: { top: "stone", side: "stone", bottom: "stone" },
   },
+  [BLOCKS.PLANKS]: {
+    name: "Planks",
+    color: [0.69, 0.55, 0.35],
+    solid: true,
+    textures: { top: "planks", side: "planks", bottom: "planks" },
+  },
+  [BLOCKS.BRICK]: {
+    name: "Brick",
+    color: [0.62, 0.32, 0.26],
+    solid: true,
+    textures: { top: "brick", side: "brick", bottom: "brick" },
+  },
+  [BLOCKS.GLASS]: {
+    name: "Glass",
+    color: [0.82, 0.9, 0.92],
+    solid: true,
+    textures: { top: "glass", side: "glass", bottom: "glass" },
+  },
 };
 
 // Selectable in the hotbar, in slot order. Water/bedrock are world-generated only.
-const HOTBAR_BLOCKS = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.SAND, BLOCKS.WOOD, BLOCKS.LEAVES];
+const HOTBAR_BLOCKS = [
+  BLOCKS.GRASS,
+  BLOCKS.DIRT,
+  BLOCKS.STONE,
+  BLOCKS.SAND,
+  BLOCKS.WOOD,
+  BLOCKS.LEAVES,
+  BLOCKS.PLANKS,
+  BLOCKS.BRICK,
+  BLOCKS.GLASS,
+];
 
 function isSolid(id) {
   return id !== BLOCKS.AIR && BLOCK_INFO[id]?.solid !== false;

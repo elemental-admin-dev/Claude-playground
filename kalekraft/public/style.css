@@ -94,6 +94,64 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+#crafting-panel {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  width: 220px;
+  background: rgba(10, 12, 18, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  pointer-events: none;
+}
+
+#crafting-panel.hidden {
+  display: none;
+}
+
+.crafting-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #cfd6e4;
+  margin-bottom: 8px;
+}
+
+.recipe-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.75rem;
+}
+
+.recipe-row.ready .recipe-name {
+  color: #9fe6b0;
+}
+
+.recipe-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+
+.recipe-name {
+  flex: 1;
+}
+
+.recipe-need {
+  font-variant-numeric: tabular-nums;
+  color: #cfd6e4;
+}
+
 #overlay {
   position: fixed;
   inset: 0;

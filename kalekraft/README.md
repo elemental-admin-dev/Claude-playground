@@ -4,9 +4,9 @@ A small browser voxel sandbox — not Minecraft (trademark reasons, and
 scope), but the same idea in miniature: procedurally generated terrain
 with a few wandering passive mobs, first-person movement with gravity and
 collision, gathering and placing blocks (break one to add it to your
-inventory, spend one to place it), and a shared multiplayer world — anyone
-who opens the page walks the same terrain and sees the same edits, live.
-Rendered with Three.js.
+inventory, spend one to place it), crafting raw blocks into refined ones,
+and a shared multiplayer world — anyone who opens the page walks the same
+terrain and sees the same edits, live. Rendered with Three.js.
 
 ## Run
 
@@ -27,16 +27,20 @@ you're in.
 | Mouse | Look |
 | Left click | Break the targeted block (adds it to your inventory) |
 | Right click | Place the selected block (costs one from your inventory) |
-| `1`-`6` | Select a hotbar block |
+| `1`-`9` | Select a hotbar block |
+| `C` | Toggle the crafting panel |
+| `Z` / `X` / `V` | Craft Planks / Brick / Glass (works whether the panel is open or not) |
 | `Esc` | Release the mouse (auto-saves) |
 | `N` | Discard your local edits and resync to the shared world |
 
 You start with nothing — break blocks to collect them. Each hotbar slot
 shows how many of that block you're carrying; an empty slot (dimmed, no
-count) can't be placed until you gather more. Your local view of the world
-(and your inventory) autosaves to `localStorage` every 15 seconds and
-whenever you release the pointer, so reloading the page resumes where you
-left off.
+count) can't be placed until you gather more. The crafting panel (`C`)
+shows what each recipe needs and turns green once you have enough — no
+mouse needed, since a visible cursor isn't available while the pointer is
+locked for looking around. Your local view of the world (and your
+inventory) autosaves to `localStorage` every 15 seconds and whenever you
+release the pointer, so reloading the page resumes where you left off.
 
 Everyone who loads the page is in the **same world** and sees each other
 as simple blue boxes moving around; breaking or placing a block shows up
@@ -71,9 +75,9 @@ recorded them, only relayed them live.
 - `blocks.js` — the block type registry (id, name, color, solid/transparent,
   and which procedural texture each face uses).
 - `textures.js` — a deterministic, per-pixel procedural texture for each
-  block "kind" (stone, dirt, grass top/side, wood top/side, leaves, sand),
-  generated from a pixel-coordinate hash — no image assets. Pure; the
-  actual `<canvas>` atlas is assembled in `main.js`.
+  block "kind" (stone, dirt, grass top/side, wood top/side, leaves, sand,
+  planks, brick, glass), generated from a pixel-coordinate hash — no image
+  assets. Pure; the actual `<canvas>` atlas is assembled in `main.js`.
 - `terrain.js` — pure, chunk-agnostic terrain rules: surface height and
   "is a tree rooted here" are both plain functions of `(worldX, worldZ,
   seed)`. That's what lets two neighboring chunks agree on a tree that
@@ -106,14 +110,20 @@ recorded them, only relayed them live.
 - `inventory.js` — a simple per-block-id item count: breaking adds one,
   placing costs one (and refuses if you don't have one). Serializable, so
   it saves and loads with the rest of the world.
+- `crafting.js` — a tiny recipe registry on top of `Inventory` (wood ->
+  planks, stone -> brick, sand -> glass): `craft(inventory, recipeId)`
+  checks and spends the inputs and grants the output in one step, a no-op
+  if you're short on materials. No furnace/heat mechanic — these are
+  simplified stand-ins for what would normally need smelting.
 - `main.js` — the only file that isn't unit tested: Three.js scene/camera
   setup, pointer-lock mouse look, keyboard input, the render loop, the
   chunk streaming manager (mesh chunks within render distance a few per
   frame, unmesh — not discard — the rest as the player moves), spawning
-  and rendering mobs as simple colored boxes, hotbar UI, localStorage
-  persistence, and the multiplayer WebSocket connection (sending edits/
-  position, applying incoming edits, rendering other players as blue
-  boxes). It's a thin wrapper around the modules above. Mobs themselves
+  and rendering mobs as simple colored boxes, hotbar and crafting-panel
+  UI, localStorage persistence, and the multiplayer WebSocket connection
+  (sending edits/position, applying incoming edits, rendering other
+  players as blue boxes). It's a thin wrapper around the modules above.
+  Mobs themselves
   aren't saved or synced — they're ambient wildlife, not shared state, so
   a fresh batch spawns near each player independently on load.
 - `server.js` — Express serving `public/` as static files (plus Three's
@@ -131,14 +141,16 @@ npm test
 Runs unit tests (`node --test`) for noise, terrain rules, chunk-aware world
 generation/raycasting (including determinism across chunk and negative
 coordinates, and boundary-straddling trees), procedural textures, mesh
-face-culling and UV mapping, inventory accounting, shared physics, and
-player/mob movement (including that mob AI is deterministic for a given
-rng) — the entire simulation core, with no browser or WebGL required.
+face-culling and UV mapping, inventory accounting, crafting recipes,
+shared physics, and player/mob movement (including that mob AI is
+deterministic for a given rng) — the entire simulation core, with no
+browser or WebGL required.
 
 ## Limitations
 
-This is a tech-demo scale sandbox, not a game: no crafting (raw blocks
-only, no recipes), and mobs are purely decorative and unsynced — each
+This is a tech-demo scale sandbox, not a game: only 3 crafting recipes
+(planks/brick/glass) and no deeper progression (tools, armor, multi-step
+chains), and mobs are purely decorative and unsynced — each
 client's mobs wander independently, with no interaction with the player,
 each other, or combat. Multiplayer is real but intentionally minimal: no
 catch-up sync for late joiners (see above), no chat, no player-vs-player
