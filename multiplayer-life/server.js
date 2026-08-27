@@ -69,6 +69,10 @@ wss.on("connection", (ws, req) => {
   ws.clientKey = clientKeyFor(req);
   send(ws, initMessage());
 
+  ws.on("error", (err) => {
+    console.warn("multiplayer-life: client socket error", err.message);
+  });
+
   ws.on("message", (raw) => {
     let msg;
     try {
@@ -76,7 +80,7 @@ wss.on("connection", (ws, req) => {
     } catch {
       return;
     }
-    if (msg.type !== "toggle") return;
+    if (typeof msg !== "object" || msg === null || msg.type !== "toggle") return;
 
     const { x, y } = msg;
     if (!Number.isInteger(x) || !Number.isInteger(y)) return;
@@ -100,6 +104,11 @@ setInterval(() => {
   nextTickAt = Date.now() + TICK_MS;
   broadcast({ type: "tick", cells: toArray(board), tickNumber, nextTickAt });
 }, TICK_MS);
+
+// Bounds memory on a long-running server: drops cooldown entries for ids
+// that haven't acted recently, which behave identically to an id that was
+// never seen.
+setInterval(() => cooldown.sweep(), COOLDOWN_MS);
 
 server.listen(PORT, () => {
   console.log(`multiplayer-life listening on http://localhost:${PORT}`);

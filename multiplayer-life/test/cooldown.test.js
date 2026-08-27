@@ -31,3 +31,25 @@ test("cooldowns are tracked independently per id", () => {
   assert.equal(tracker.canAct("b", 0), true);
   assert.equal(tracker.tryAct("b", 0), true);
 });
+
+test("sweep drops entries whose cooldown has fully elapsed", () => {
+  const tracker = new CooldownTracker(60_000);
+  tracker.tryAct("a", 0);
+  tracker.sweep(60_000);
+  assert.equal(tracker.lastActionAt.has("a"), false);
+});
+
+test("sweep keeps entries still within their cooldown window", () => {
+  const tracker = new CooldownTracker(60_000);
+  tracker.tryAct("a", 0);
+  tracker.sweep(30_000);
+  assert.equal(tracker.lastActionAt.has("a"), true);
+});
+
+test("sweeping a dropped id behaves exactly like an id never seen", () => {
+  const tracker = new CooldownTracker(60_000);
+  tracker.tryAct("a", 0);
+  tracker.sweep(60_000);
+  assert.equal(tracker.canAct("a", 60_000), true);
+  assert.equal(tracker.remaining("a", 60_000), 0);
+});

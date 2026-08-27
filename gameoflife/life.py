@@ -32,7 +32,9 @@ class Board:
         for y, row in enumerate(pattern.strip("\n").splitlines()):
             for x, char in enumerate(row):
                 if char in "#*O":
-                    cells.add((x + ox, y + oy))
+                    cx, cy = x + ox, y + oy
+                    if 0 <= cx < width and 0 <= cy < height:
+                        cells.add((cx, cy))
         return cls(width, height, cells)
 
     def neighbors(self, x: int, y: int) -> int:

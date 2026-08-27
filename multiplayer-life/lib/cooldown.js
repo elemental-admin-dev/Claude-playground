@@ -24,6 +24,18 @@ class CooldownTracker {
     this.lastActionAt.set(id, now);
     return true;
   }
+
+  /**
+   * Drops entries whose cooldown has already fully elapsed. Safe to call at
+   * any time — canAct/remaining/tryAct behave identically for a dropped id
+   * as for one that was never seen — this just bounds memory on a
+   * long-running server that many distinct ids pass through over time.
+   */
+  sweep(now = Date.now()) {
+    for (const [id, last] of this.lastActionAt) {
+      if (now - last >= this.cooldownMs) this.lastActionAt.delete(id);
+    }
+  }
 }
 
 module.exports = { CooldownTracker };

@@ -58,9 +58,11 @@ function updateCountdowns() {
 }
 setInterval(updateCountdowns, 250);
 
+let ws = null;
+
 function connect() {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${protocol}//${location.host}`);
+  ws = new WebSocket(`${protocol}//${location.host}`);
 
   ws.addEventListener("open", () => {
     connectionEl.textContent = "live";
@@ -110,20 +112,21 @@ function connect() {
       }
     }
   });
-
-  canvas.addEventListener("click", (event) => {
-    if (Date.now() < cooldownUntil) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = Math.floor(((event.clientX - rect.left) * scaleX) / CELL_SIZE);
-    const y = Math.floor(((event.clientY - rect.top) * scaleY) / CELL_SIZE);
-    if (x < 0 || x >= width || y < 0 || y >= height) return;
-
-    ws.send(JSON.stringify({ type: "toggle", x, y }));
-    // Optimistic lock; the server's "cooldown" or "denied" reply corrects this if needed.
-    cooldownUntil = Date.now() + cooldownMs;
-  });
 }
+
+canvas.addEventListener("click", (event) => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return; // no live connection to send the click on
+  if (Date.now() < cooldownUntil) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = Math.floor(((event.clientX - rect.left) * scaleX) / CELL_SIZE);
+  const y = Math.floor(((event.clientY - rect.top) * scaleY) / CELL_SIZE);
+  if (x < 0 || x >= width || y < 0 || y >= height) return;
+
+  ws.send(JSON.stringify({ type: "toggle", x, y }));
+  // Optimistic lock; the server's "cooldown" or "denied" reply corrects this if needed.
+  cooldownUntil = Date.now() + cooldownMs;
+});
 
 connect();

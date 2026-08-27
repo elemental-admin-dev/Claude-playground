@@ -84,3 +84,29 @@ def test_save_then_load_round_trips_live_cells():
         assert loaded.live_cells == board.live_cells
     finally:
         os.remove(path)
+
+
+def test_from_pattern_clips_cells_outside_the_declared_bounds():
+    # A pattern with live cells at columns 0-4, loaded onto a 3-wide board:
+    # cells at x=3,4 must not survive into live_cells, or population() and
+    # step() would disagree about the board's state until the first step().
+    wide_pattern = "#####"
+    board = Board.from_pattern(wide_pattern, width=3, height=1)
+    assert board.live_cells == {(0, 0), (1, 0), (2, 0)}
+    assert board.population() == 3
+
+
+def test_loading_a_saved_board_onto_a_smaller_board_clips_out_of_range_cells():
+    # Glider at offset (3, 3) straddles the boundary of a 5x5 board: only its
+    # (4, 3) cell is in range, the rest fall at x=5 or y=5 (out of 0..4).
+    board = Board.from_pattern(GLIDER, 10, 10, offset=(3, 3))
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        path = f.name
+    try:
+        save_pattern(board, path)
+        loaded = load_pattern(path, 5, 5)  # smaller than the saved board
+        assert loaded.live_cells == {(4, 3)}
+        assert all(0 <= x < 5 and 0 <= y < 5 for x, y in loaded.live_cells)
+        assert loaded.population() == len(loaded.live_cells)
+    finally:
+        os.remove(path)
