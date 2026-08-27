@@ -46,7 +46,12 @@ meshes, not the whole world.
 
 - `noise.js` — deterministic seeded 2D value noise + fBm, used for terrain
   heightmaps. No external noise library.
-- `blocks.js` — the block type registry (id, name, color, solid/transparent).
+- `blocks.js` — the block type registry (id, name, color, solid/transparent,
+  and which procedural texture each face uses).
+- `textures.js` — a deterministic, per-pixel procedural texture for each
+  block "kind" (stone, dirt, grass top/side, wood top/side, leaves, sand),
+  generated from a pixel-coordinate hash — no image assets. Pure; the
+  actual `<canvas>` atlas is assembled in `main.js`.
 - `terrain.js` — pure, chunk-agnostic terrain rules: surface height and
   "is a tree rooted here" are both plain functions of `(worldX, worldZ,
   seed)`. That's what lets two neighboring chunks agree on a tree that
@@ -61,8 +66,11 @@ meshes, not the whole world.
   persists chunks a player has actually edited — everything else
   regenerates identically from the seed.
 - `mesh.js` — turns one chunk into typed-array mesh data (positions,
-  normals, vertex colors, indices), culling faces between two opaque
-  blocks (including across a chunk boundary, via `world.getBlock`).
+  normals, vertex colors, UVs, indices), culling faces between two opaque
+  blocks (including across a chunk boundary, via `world.getBlock`) and
+  mapping each face to its block's atlas tile. The vertex color carries
+  only the per-face fake-AO shade (white for textured blocks, the real hue
+  for untextured ones like water) — hue comes from the texture map.
   Doesn't touch Three.js or WebGL, so it's fully unit-testable.
 - `player.js` — pure physics: gravity, jumping, and axis-separated AABB vs.
   voxel collision.
@@ -84,16 +92,17 @@ npm test
 
 Runs unit tests (`node --test`) for noise, terrain rules, chunk-aware world
 generation/raycasting (including determinism across chunk and negative
-coordinates, and boundary-straddling trees), mesh face-culling, and player
-physics — the entire simulation core, with no browser or WebGL required.
+coordinates, and boundary-straddling trees), procedural textures, mesh
+face-culling and UV mapping, and player physics — the entire simulation
+core, with no browser or WebGL required.
 
 ## Limitations
 
 This is a tech-demo scale sandbox, not a game: no multiplayer, no
-crafting/inventory (the hotbar is unlimited), no mobs, and no textures
-(flat-shaded per-face colors). Anything taller than a single block (a tree
-trunk, a cliff face) still fully blocks walking into it — jump over it or
-go around; single-block ledges auto-step. The world itself is no longer
+crafting/inventory (the hotbar is unlimited), and no mobs. Anything taller
+than a single block (a tree trunk, a cliff face) still fully blocks walking
+into it — jump over it or go around; single-block ledges auto-step. The
+world itself is no longer
 the limiting factor: chunks stream in as you
 walk, generation and re-meshing are budgeted per frame, editing only
 rebuilds the touched chunk(s), and unedited chunks far from the player are

@@ -3,6 +3,7 @@ import { World } from "./world.js";
 import { buildChunkMeshData } from "./mesh.js";
 import { BLOCKS, BLOCK_INFO, HOTBAR_BLOCKS } from "./blocks.js";
 import { createPlayer, stepPlayer, EYE_OFFSET } from "./player.js";
+import { KINDS, TILE_SIZE, pixelColor } from "./textures.js";
 
 const SAVE_KEY = "kalekraft-save-v2";
 const REACH = 6;
@@ -85,7 +86,38 @@ const sun = new THREE.DirectionalLight(0xffffff, 0.75);
 sun.position.set(0.6, 1, 0.4);
 scene.add(sun);
 
-const opaqueMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+function buildTextureAtlas() {
+  const atlasCanvas = document.createElement("canvas");
+  atlasCanvas.width = KINDS.length * TILE_SIZE;
+  atlasCanvas.height = TILE_SIZE;
+  const ctx = atlasCanvas.getContext("2d");
+  const image = ctx.createImageData(atlasCanvas.width, atlasCanvas.height);
+  for (let i = 0; i < KINDS.length; i++) {
+    const kind = KINDS[i];
+    for (let py = 0; py < TILE_SIZE; py++) {
+      for (let px = 0; px < TILE_SIZE; px++) {
+        const [r, g, b] = pixelColor(kind, px, py);
+        const idx = (py * atlasCanvas.width + (i * TILE_SIZE + px)) * 4;
+        image.data[idx] = r;
+        image.data[idx + 1] = g;
+        image.data[idx + 2] = b;
+        image.data[idx + 3] = 255;
+      }
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(atlasCanvas);
+  texture.magFilter = THREE.NearestFilter; // crisp pixels, no blur between tiles
+  texture.minFilter = THREE.NearestFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+const opaqueMaterial = new THREE.MeshLambertMaterial({
+  vertexColors: true,
+  side: THREE.DoubleSide,
+  map: buildTextureAtlas(),
+});
 const waterMaterial = new THREE.MeshLambertMaterial({
   vertexColors: true,
   side: THREE.DoubleSide,
@@ -98,6 +130,7 @@ function bucketToGeometry(bucket) {
   geometry.setAttribute("position", new THREE.BufferAttribute(bucket.positions, 3));
   geometry.setAttribute("normal", new THREE.BufferAttribute(bucket.normals, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(bucket.colors, 3));
+  geometry.setAttribute("uv", new THREE.BufferAttribute(bucket.uvs, 2));
   geometry.setIndex(new THREE.BufferAttribute(bucket.indices, 1));
   return geometry;
 }

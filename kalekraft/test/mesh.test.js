@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { World } from "../public/world.js";
-import { buildChunkMeshData } from "../public/mesh.js";
+import { buildChunkMeshData, faceCategory, localFaceUV } from "../public/mesh.js";
 import { BLOCKS } from "../public/blocks.js";
+import { KINDS } from "../public/textures.js";
 
 function blankWorld(chunkSize = 6, chunkHeight = 6) {
   return new World(0, { chunkSize, chunkHeight, autoGenerate: false });
@@ -69,4 +70,49 @@ test("emitted quad indices reference only vertices within range", () => {
   for (const i of opaque.indices) {
     assert.ok(i >= 0 && i <= maxIndex);
   }
+});
+
+test("a textured block emits a uv per vertex within its own atlas tile", () => {
+  const world = blankWorld();
+  world.setBlock(1, 1, 1, BLOCKS.GRASS);
+  const { opaque } = buildChunkMeshData(world, 0, 0);
+  assert.equal(opaque.uvs.length, opaque.quadCount * 4 * 2);
+  for (let i = 0; i < opaque.uvs.length; i++) {
+    assert.ok(opaque.uvs[i] >= 0 && opaque.uvs[i] <= 1);
+  }
+});
+
+test("grass uses a different atlas tile per face category (top vs side vs bottom)", () => {
+  const world = blankWorld();
+  world.setBlock(2, 2, 2, BLOCKS.GRASS);
+  const { opaque } = buildChunkMeshData(world, 0, 0);
+  // each face is 4 verts * 2 floats = 8 uv values in emission order matching FACES: +x,-x,+y(top),-y(bottom),+z,-z
+  const uAt = (faceIndex) => opaque.uvs[faceIndex * 8];
+  const topTile = KINDS.indexOf("grass-top");
+  const bottomTile = KINDS.indexOf("dirt");
+  const sideTile = KINDS.indexOf("grass-side");
+  assert.equal(Math.floor(uAt(2) * KINDS.length), topTile); // +y face
+  assert.equal(Math.floor(uAt(3) * KINDS.length), bottomTile); // -y face
+  assert.equal(Math.floor(uAt(0) * KINDS.length), sideTile); // +x face
+});
+
+test("water (untextured) still emits a valid, in-range uv per vertex", () => {
+  const world = blankWorld();
+  world.setBlock(1, 1, 1, BLOCKS.WATER);
+  const { water } = buildChunkMeshData(world, 0, 0);
+  assert.equal(water.uvs.length, water.quadCount * 4 * 2);
+  for (const v of water.uvs) assert.ok(v >= 0 && v <= 1);
+});
+
+test("faceCategory maps +y/-y to top/bottom and everything else to side", () => {
+  assert.equal(faceCategory([0, 1, 0]), "top");
+  assert.equal(faceCategory([0, -1, 0]), "bottom");
+  for (const dir of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]) {
+    assert.equal(faceCategory(dir), "side");
+  }
+});
+
+test("localFaceUV maps a side face's corner height directly to v", () => {
+  assert.deepEqual(localFaceUV([1, 0, 0], [1, 0, 0]), [0, 0]);
+  assert.deepEqual(localFaceUV([1, 0, 0], [1, 1, 0]), [0, 1]);
 });
