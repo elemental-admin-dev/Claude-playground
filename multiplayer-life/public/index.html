@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multiplayer Game of Life</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Multiplayer Game of Life</h1>
+    <p class="subtitle">Click a cell to place or remove it. The board advances on its own — one shared canvas, one move per minute.</p>
+  </header>
+
+  <div id="status">
+    <div class="stat">
+      <span class="label">Next tick</span>
+      <span class="value" id="tick-countdown">--:--</span>
+    </div>
+    <div class="stat">
+      <span class="label">Your cooldown</span>
+      <span class="value" id="cooldown-countdown">ready</span>
+    </div>
+    <div class="stat">
+      <span class="label">Generation</span>
+      <span class="value" id="generation">0</span>
+    </div>
+    <div class="stat">
+      <span class="label">Connection</span>
+      <span class="value" id="connection">connecting…</span>
+    </div>
+  </div>
+
+  <canvas id="board"></canvas>
+
+  <script src="client.js"></script>
+</body>
+</html>

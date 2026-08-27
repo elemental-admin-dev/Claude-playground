@@ -1,0 +1,15 @@
+{
+  "name": "multiplayer-life",
+  "version": "1.0.0",
+  "description": "A shared Conway's Game of Life board: place or remove a cell on a 1-minute cooldown, the board itself advances every 5 minutes.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
