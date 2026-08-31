@@ -9,6 +9,7 @@ import { createMob, stepMob, HALF_WIDTH as MOB_HALF_WIDTH, HEIGHT as MOB_HEIGHT 
 import { HALF_WIDTH as PLAYER_HALF_WIDTH, HEIGHT as PLAYER_HEIGHT } from "./player.js";
 import { RECIPES, craft } from "./crafting.js";
 import { SHARED_WORLD_SEED } from "./config.js";
+import { damp, dampAngle } from "./interp.js";
 
 const SAVE_KEY = "kalekraft-save-v4";
 const REACH = 6;
@@ -299,27 +300,45 @@ function updateMobs(dt) {
 // -------------------------------------------------------------- multiplayer
 //
 // Every client generates identical terrain from SHARED_WORLD_SEED, so the
-// server is a pure relay: it forwards edit/move events between clients and
-// tracks who's connected for avatar placement. A player who joins mid-
-// session won't see edits made before they connected — see the README.
+// server only needs to relay *edits* (and player positions, for avatars),
+// never terrain — including catch-up for a player who joins mid-session,
+// via the server's own authoritative (edits-only) World. See the README.
 
 const remotePlayerGeometry = new THREE.BoxGeometry(PLAYER_HALF_WIDTH * 2, PLAYER_HEIGHT, PLAYER_HALF_WIDTH * 2);
 const remotePlayerMaterial = new THREE.MeshLambertMaterial({ color: 0x4aa3d9 });
-const remotePlayers = new Map(); // playerId -> { mesh, x, y, z, yaw }
+const remotePlayers = new Map(); // playerId -> { mesh, targetX, targetY, targetZ, targetYaw }
+const REMOTE_PLAYER_SMOOTHING = 12; // higher = closes the gap to the target faster
 let myPlayerId = null;
 let ws = null;
 let lastMoveSentAt = 0;
 
+// Moves are relayed at ~10Hz (MOVE_BROADCAST_MS), which looks visibly choppy
+// if applied straight to the mesh. upsertRemotePlayer only updates the
+// *target*; updateRemotePlayers eases the mesh toward it every frame.
 function upsertRemotePlayer(id, x, y, z, yaw) {
   let entry = remotePlayers.get(id);
   if (!entry) {
     const mesh = new THREE.Mesh(remotePlayerGeometry, remotePlayerMaterial);
     scene.add(mesh);
-    entry = { mesh };
-    remotePlayers.set(id, entry);
+    mesh.position.set(x, y + PLAYER_HEIGHT / 2, z); // first sighting: snap, don't ease in from the origin
+    mesh.rotation.y = yaw;
+    remotePlayers.set(id, { mesh, targetX: x, targetY: y, targetZ: z, targetYaw: yaw });
+    return;
   }
-  entry.mesh.position.set(x, y + PLAYER_HEIGHT / 2, z);
-  entry.mesh.rotation.y = yaw;
+  entry.targetX = x;
+  entry.targetY = y;
+  entry.targetZ = z;
+  entry.targetYaw = yaw;
+}
+
+function updateRemotePlayers(dt) {
+  for (const entry of remotePlayers.values()) {
+    const { mesh } = entry;
+    mesh.position.x = damp(mesh.position.x, entry.targetX, REMOTE_PLAYER_SMOOTHING, dt);
+    mesh.position.y = damp(mesh.position.y - PLAYER_HEIGHT / 2, entry.targetY, REMOTE_PLAYER_SMOOTHING, dt) + PLAYER_HEIGHT / 2;
+    mesh.position.z = damp(mesh.position.z, entry.targetZ, REMOTE_PLAYER_SMOOTHING, dt);
+    mesh.rotation.y = dampAngle(mesh.rotation.y, entry.targetYaw, REMOTE_PLAYER_SMOOTHING, dt);
+  }
 }
 
 function removeRemotePlayer(id) {
@@ -588,6 +607,7 @@ function animate(now) {
   updateChunkStreaming();
   processChunkQueue();
   updateMobs(dt);
+  updateRemotePlayers(dt);
   maybeSendMove(now);
 
   if (document.pointerLockElement === canvas) {

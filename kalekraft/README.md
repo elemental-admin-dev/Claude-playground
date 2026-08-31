@@ -123,6 +123,11 @@ any terrain, only the sparse diff.
   checks and spends the inputs and grants the output in one step, a no-op
   if you're short on materials. No furnace/heat mechanic — these are
   simplified stand-ins for what would normally need smelting.
+- `interp.js` — frame-rate-independent exponential easing (`damp`) toward a
+  target value, plus an angle-aware variant (`dampAngle`) that always turns
+  the short way around. Used to smooth remote players' rendered position
+  between the sparse (~10Hz) multiplayer position updates instead of
+  visibly snapping to each one.
 - `main.js` — the only file that isn't unit tested: Three.js scene/camera
   setup, pointer-lock mouse look, keyboard input, the render loop, the
   chunk streaming manager (mesh chunks within render distance a few per
@@ -152,7 +157,8 @@ Runs unit tests (`node --test`) for noise, terrain rules, chunk-aware world
 generation/raycasting (including determinism across chunk and negative
 coordinates, and boundary-straddling trees), procedural textures, mesh
 face-culling and UV mapping, inventory accounting, crafting recipes,
-shared physics, and player/mob movement (including that mob AI is
+frame-rate-independent damping (including angle wraparound), shared
+physics, and player/mob movement (including that mob AI is
 deterministic for a given rng) — the entire simulation core, with no
 browser or WebGL required.
 
@@ -162,10 +168,9 @@ This is a tech-demo scale sandbox, not a game: only 3 crafting recipes
 (planks/brick/glass) and no deeper progression (tools, armor, multi-step
 chains), and mobs are purely decorative and unsynced — each
 client's mobs wander independently, with no interaction with the player,
-each other, or combat. Multiplayer is real but intentionally minimal: no chat, no player-vs-player
-interaction beyond seeing each other move and each other's edits, remote
-avatars snap to each position update rather than interpolating (choppy at
-the ~10Hz broadcast rate), and inventories are per-client, not shared. The
+each other, or combat. Multiplayer is real but intentionally minimal: no
+chat, no player-vs-player interaction beyond seeing each other move and
+each other's edits, and inventories are per-client, not shared. The
 server's authoritative World (edits only) also grows unboundedly over a
 long-running server's uptime, the same tradeoff `evictFarChunks` solves on
 the client but that doesn't apply server-side, since it has no player
