@@ -34,7 +34,9 @@ function deserializeState(json) {
     data.height <= 0 ||
     !Array.isArray(data.cells) ||
     !Number.isInteger(data.tickNumber) ||
-    !Number.isInteger(data.nextTickAt)
+    data.tickNumber < 0 ||
+    !Number.isInteger(data.nextTickAt) ||
+    data.nextTickAt < 0
   ) {
     throw new Error("invalid saved board state");
   }

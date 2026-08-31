@@ -1,22 +1,22 @@
 "use strict";
 
-const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const express = require("express");
 const { WebSocketServer } = require("ws");
 const { createBoard, toggleCell, step, toArray } = require("./lib/board");
 const { CooldownTracker } = require("./lib/cooldown");
-const { serializeState, deserializeState } = require("./lib/persistence");
+const { positiveNumberFromEnv } = require("./lib/env");
+const { loadState, saveState: writeStateFile } = require("./lib/statefile");
 
-const WIDTH = Number(process.env.BOARD_WIDTH) || 60;
-const HEIGHT = Number(process.env.BOARD_HEIGHT) || 40;
-const TICK_MS = Number(process.env.TICK_MS) || 5 * 60 * 1000;
-const COOLDOWN_MS = Number(process.env.COOLDOWN_MS) || 60 * 1000;
-const PORT = Number(process.env.PORT) || 3000;
+const WIDTH = positiveNumberFromEnv("BOARD_WIDTH", 60);
+const HEIGHT = positiveNumberFromEnv("BOARD_HEIGHT", 40);
+const TICK_MS = positiveNumberFromEnv("TICK_MS", 5 * 60 * 1000);
+const COOLDOWN_MS = positiveNumberFromEnv("COOLDOWN_MS", 60 * 1000);
+const PORT = positiveNumberFromEnv("PORT", 3000);
 const SEED_DENSITY = 0.12;
 const SAVE_FILE = process.env.SAVE_FILE || path.join(__dirname, "board-save.json");
-const SAVE_INTERVAL_MS = Number(process.env.SAVE_INTERVAL_MS) || 30 * 1000;
+const SAVE_INTERVAL_MS = positiveNumberFromEnv("SAVE_INTERVAL_MS", 30 * 1000);
 
 function randomSeed(width, height, density) {
   const cells = [];
@@ -28,42 +28,26 @@ function randomSeed(width, height, density) {
   return cells;
 }
 
-function loadSavedState() {
-  try {
-    const json = fs.readFileSync(SAVE_FILE, "utf8");
-    const restored = deserializeState(json);
-    if (restored.board.width !== WIDTH || restored.board.height !== HEIGHT) {
-      console.warn("multiplayer-life: saved board size doesn't match configured size, starting fresh");
-      return null;
-    }
-    return restored;
-  } catch (err) {
-    if (err.code !== "ENOENT") console.warn("multiplayer-life: couldn't load saved state, starting fresh:", err.message);
-    return null;
-  }
-}
-
 function saveState() {
   try {
-    // Write-then-rename instead of an in-place write, so a save that's
-    // interrupted mid-flush (SIGKILL, OOM) leaves the previous save file
-    // intact rather than a truncated, unloadable one.
-    const tmpFile = `${SAVE_FILE}.tmp`;
-    fs.writeFileSync(tmpFile, serializeState(board, tickNumber, nextTickAt));
-    fs.renameSync(tmpFile, SAVE_FILE);
+    writeStateFile(SAVE_FILE, board, tickNumber, nextTickAt);
   } catch (err) {
     console.warn("multiplayer-life: couldn't save state:", err.message);
   }
 }
 
-const saved = loadSavedState();
+const loaded = loadState(SAVE_FILE, WIDTH, HEIGHT);
+if (loaded.sizeMismatch) console.warn("multiplayer-life: saved board size doesn't match configured size, starting fresh");
+else if (loaded.error) console.warn("multiplayer-life: couldn't load saved state, starting fresh:", loaded.error.message);
+const saved = loaded.state;
 let board = saved ? saved.board : createBoard(WIDTH, HEIGHT, randomSeed(WIDTH, HEIGHT, SEED_DENSITY));
 let tickNumber = saved ? saved.tickNumber : 0;
-// Always scheduled relative to *this* startup, not the saved value: the
+// Always scheduled relative to *this* startup, not any saved value: the
 // setInterval below always starts a fresh TICK_MS countdown at boot, so a
 // restored nextTickAt from before a restart would be stale (already in the
 // past, or ahead of when the timer will actually fire) and desync the
 // countdown clients display from when the tick server-side actually happens.
+// (loadState() doesn't even return a saved nextTickAt, for exactly this reason.)
 let nextTickAt = Date.now() + TICK_MS;
 const cooldown = new CooldownTracker(COOLDOWN_MS);
 

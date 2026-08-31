@@ -73,3 +73,19 @@ test("silently drops malformed or out-of-bounds cell entries instead of throwing
   );
   assert.deepEqual(toArray(restored.board), [[1, 1]]);
 });
+
+test("rejects a negative tickNumber", () => {
+  assert.throws(() =>
+    deserializeState(
+      JSON.stringify({ width: 10, height: 10, cells: [], tickNumber: -1, nextTickAt: 0 }),
+    ),
+  );
+});
+
+test("rejects a negative nextTickAt", () => {
+  assert.throws(() =>
+    deserializeState(
+      JSON.stringify({ width: 10, height: 10, cells: [], tickNumber: 0, nextTickAt: -1 }),
+    ),
+  );
+});
