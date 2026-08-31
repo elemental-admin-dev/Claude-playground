@@ -5,8 +5,10 @@ scope), but the same idea in miniature: procedurally generated terrain
 with a few wandering passive mobs, first-person movement with gravity and
 collision, gathering and placing blocks (break one to add it to your
 inventory, spend one to place it), crafting raw blocks into refined ones,
-and a shared multiplayer world — anyone who opens the page walks the same
-terrain and sees the same edits, live. Rendered with Three.js.
+a shared multiplayer world — anyone who opens the page walks the same
+terrain and sees the same edits, live — and a few procedurally synthesized
+sound effects (no audio files) for breaking, placing, jumping, and
+crafting. Rendered with Three.js.
 
 ## Run
 
@@ -32,6 +34,11 @@ you're in.
 | `Z` / `X` / `V` | Craft Planks / Brick / Glass (works whether the panel is open or not) |
 | `Esc` | Release the mouse (auto-saves) |
 | `N` | Discard your local edits and resync to the shared world |
+
+Breaking, placing, jumping, and crafting each play a small synthesized
+sound. Browsers only allow audio after a user gesture, so sound stays
+silent until you click the title screen to lock the pointer — same click
+that starts everything else.
 
 You start with nothing — break blocks to collect them. Each hotbar slot
 shows how many of that block you're carrying; an empty slot (dimmed, no
@@ -128,12 +135,18 @@ any terrain, only the sparse diff.
   the short way around. Used to smooth remote players' rendered position
   between the sparse (~10Hz) multiplayer position updates instead of
   visibly snapping to each one.
+- `audio.js` — sound "recipes" (type, duration, frequency/notes, gain) for
+  break/place/jump/craft, as plain data with no `AudioContext` dependency,
+  so the presets are unit-testable without a browser. The actual synthesis
+  (oscillators for tones/chimes, a filtered noise buffer for the break
+  sound) happens in `main.js`, which has the real `AudioContext`.
 - `main.js` — the only file that isn't unit tested: Three.js scene/camera
   setup, pointer-lock mouse look, keyboard input, the render loop, the
   chunk streaming manager (mesh chunks within render distance a few per
   frame, unmesh — not discard — the rest as the player moves), spawning
   and rendering mobs as simple colored boxes, hotbar and crafting-panel
-  UI, localStorage persistence, and the multiplayer WebSocket connection
+  UI, localStorage persistence, procedural sound synthesis from
+  `audio.js`'s presets, and the multiplayer WebSocket connection
   (sending edits/position, applying incoming edits, rendering other
   players as blue boxes). It's a thin wrapper around the modules above.
   Mobs themselves
@@ -157,8 +170,8 @@ Runs unit tests (`node --test`) for noise, terrain rules, chunk-aware world
 generation/raycasting (including determinism across chunk and negative
 coordinates, and boundary-straddling trees), procedural textures, mesh
 face-culling and UV mapping, inventory accounting, crafting recipes,
-frame-rate-independent damping (including angle wraparound), shared
-physics, and player/mob movement (including that mob AI is
+frame-rate-independent damping (including angle wraparound), sound preset
+data, shared physics, and player/mob movement (including that mob AI is
 deterministic for a given rng) — the entire simulation core, with no
 browser or WebGL required.
 

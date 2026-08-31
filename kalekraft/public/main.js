@@ -10,6 +10,7 @@ import { HALF_WIDTH as PLAYER_HALF_WIDTH, HEIGHT as PLAYER_HEIGHT } from "./play
 import { RECIPES, craft } from "./crafting.js";
 import { SHARED_WORLD_SEED } from "./config.js";
 import { damp, dampAngle } from "./interp.js";
+import { getPreset } from "./audio.js";
 
 const SAVE_KEY = "kalekraft-save-v4";
 const REACH = 6;
@@ -426,7 +427,10 @@ function flashSaveStatus(text) {
   saveStatusTimer = setTimeout(() => (saveStatus.textContent = ""), 1500);
 }
 
-overlay.addEventListener("click", () => canvas.requestPointerLock());
+overlay.addEventListener("click", () => {
+  canvas.requestPointerLock();
+  ensureAudioContext(); // browsers require a user gesture before audio can play
+});
 document.addEventListener("pointerlockchange", () => {
   const locked = document.pointerLockElement === canvas;
   overlay.classList.toggle("hidden", locked);
@@ -460,6 +464,68 @@ function currentTarget() {
   return world.raycast(camera.position, dir, REACH);
 }
 
+// ---------------------------------------------------------------------- audio
+//
+// Procedurally synthesized, like the textures and terrain — no audio files.
+// Browsers require a user gesture before audio can play, so the
+// AudioContext is created (or resumed) lazily on the first sound, which in
+// practice is triggered by the overlay click that also engages pointer lock.
+
+let audioCtx = null;
+
+function ensureAudioContext() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+function playSound(kind) {
+  const preset = getPreset(kind);
+  if (!preset) return;
+  const ctx = ensureAudioContext();
+  const now = ctx.currentTime;
+
+  if (preset.type === "tone") {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(preset.frequency, now);
+    gain.gain.setValueAtTime(preset.gain, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + preset.duration);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + preset.duration);
+  } else if (preset.type === "noise") {
+    const length = Math.max(1, Math.floor(ctx.sampleRate * preset.duration));
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    noise.buffer = buffer;
+    filter.type = "lowpass";
+    filter.frequency.value = preset.filterFreq;
+    gain.gain.setValueAtTime(preset.gain, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + preset.duration);
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start(now);
+  } else if (preset.type === "chime") {
+    preset.notes.forEach((frequency, i) => {
+      const startAt = now + i * preset.noteDuration;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(frequency, startAt);
+      gain.gain.setValueAtTime(preset.gain, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.001, startAt + preset.noteDuration);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(startAt);
+      osc.stop(startAt + preset.noteDuration);
+    });
+  }
+}
+
 function breakBlock() {
   const hit = currentTarget();
   if (!hit) return;
@@ -470,6 +536,7 @@ function breakBlock() {
   inventory.add(brokenId, 1);
   updateHotbarCounts();
   updateCraftingPanel();
+  playSound("break");
 }
 
 function placeBlock() {
@@ -484,6 +551,7 @@ function placeBlock() {
   sendEdit(place.x, place.y, place.z, selectedBlock);
   updateHotbarCounts();
   updateCraftingPanel();
+  playSound("place");
 }
 
 function intersectsPlayer(bx, by, bz) {
@@ -587,6 +655,7 @@ function tryCraftFromKey(code) {
   if (craft(inventory, RECIPES[index].id)) {
     updateHotbarCounts();
     updateCraftingPanel();
+    playSound("craft");
   }
 }
 
@@ -622,7 +691,9 @@ function animate(now) {
       moveX /= len;
       moveZ /= len;
     }
+    const wasOnGround = player.onGround;
     player = stepPlayer(world, player, { moveX, moveZ, jump: keys.has("Space") }, dt);
+    if (wasOnGround && !player.onGround && player.vy > 0) playSound("jump");
   }
 
   camera.position.set(player.x, player.y + EYE_OFFSET, player.z);
