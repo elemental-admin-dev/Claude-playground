@@ -12,7 +12,7 @@ import { SHARED_WORLD_SEED } from "./config.js";
 import { damp, dampAngle } from "./interp.js";
 import { getPreset } from "./audio.js";
 import { timeOfDay, sunDirection, ambientIntensity, sunIntensity, skyColor } from "./daynight.js";
-import { buildMinimapGrid } from "./minimap.js";
+import { buildMinimapGrid, findTopmostNonAir } from "./minimap.js";
 
 const SAVE_KEY = "kalekraft-save-v4";
 const REACH = 6;
@@ -46,10 +46,7 @@ function loadSave() {
 }
 
 function columnSurface(world, wx, wz) {
-  for (let y = world.chunkHeight - 1; y > 0; y--) {
-    if (world.getBlock(wx, y, wz) !== BLOCKS.AIR) return y;
-  }
-  return null;
+  return findTopmostNonAir(world, wx, wz, 1)?.y ?? null;
 }
 
 function findSpawn(world) {
