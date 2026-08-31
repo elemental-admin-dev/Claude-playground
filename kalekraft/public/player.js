@@ -2,6 +2,7 @@ import { collidesAt as collidesAtBody, stepBody } from "./physics.js";
 
 const JUMP_SPEED = 8.5;
 const MOVE_SPEED = 5;
+const SPRINT_MULTIPLIER = 1.6;
 const HALF_WIDTH = 0.3;
 const HEIGHT = 1.7;
 const EYE_OFFSET = 1.55;
@@ -20,13 +21,14 @@ function collidesAt(world, x, y, z) {
  * normalized to exactly 1); `input.jump` requests a jump if grounded.
  */
 function stepPlayer(world, player, input, dt) {
+  const speed = input.sprint ? MOVE_SPEED * SPRINT_MULTIPLIER : MOVE_SPEED;
   return stepBody(
     world,
     player,
     {
       moveX: input.moveX,
       moveZ: input.moveZ,
-      speed: MOVE_SPEED,
+      speed,
       jump: input.jump,
       jumpSpeed: JUMP_SPEED,
       halfWidth: HALF_WIDTH,
@@ -36,4 +38,14 @@ function stepPlayer(world, player, input, dt) {
   );
 }
 
-export { createPlayer, stepPlayer, collidesAt, MOVE_SPEED, JUMP_SPEED, HALF_WIDTH, HEIGHT, EYE_OFFSET };
+export {
+  createPlayer,
+  stepPlayer,
+  collidesAt,
+  MOVE_SPEED,
+  SPRINT_MULTIPLIER,
+  JUMP_SPEED,
+  HALF_WIDTH,
+  HEIGHT,
+  EYE_OFFSET,
+};

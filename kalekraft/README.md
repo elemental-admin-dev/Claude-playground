@@ -25,6 +25,7 @@ you're in.
 | Input | Action |
 | --- | --- |
 | `WASD` | Move |
+| `Shift` | Sprint (1.6x move speed) |
 | `Space` | Jump |
 | Mouse | Look |
 | Left click | Break the targeted block (adds it to your inventory) |

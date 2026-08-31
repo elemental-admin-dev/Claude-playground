@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { World } from "../public/world.js";
-import { createPlayer, stepPlayer } from "../public/player.js";
+import { createPlayer, stepPlayer, MOVE_SPEED, SPRINT_MULTIPLIER } from "../public/player.js";
 import { BLOCKS } from "../public/blocks.js";
 
 function flatFloorWorld() {
@@ -66,4 +66,25 @@ test("a single-block-tall ledge is auto-climbed, not blocked", () => {
   }
   assert.ok(player.x > 6.5); // walked past the ledge, not stuck against it
   assert.ok(player.y > 1.9 && player.y < 2.2); // standing on top of the platform (floor + 1)
+});
+
+test("sprinting moves faster than walking over the same time", () => {
+  const world = flatFloorWorld();
+  const walked = stepPlayer(world, createPlayer(5, 1, 5), { moveX: 1, moveZ: 0, jump: false, sprint: false }, 0.1);
+  const sprinted = stepPlayer(world, createPlayer(5, 1, 5), { moveX: 1, moveZ: 0, jump: false, sprint: true }, 0.1);
+  assert.ok(sprinted.x > walked.x);
+  assert.ok(Math.abs(sprinted.vx) > Math.abs(walked.vx));
+});
+
+test("sprint speed matches the walking speed times SPRINT_MULTIPLIER", () => {
+  const world = flatFloorWorld();
+  const sprinted = stepPlayer(world, createPlayer(5, 1, 5), { moveX: 1, moveZ: 0, jump: false, sprint: true }, 0.1);
+  assert.ok(Math.abs(sprinted.vx - MOVE_SPEED * SPRINT_MULTIPLIER) < 1e-9);
+});
+
+test("omitting sprint entirely behaves the same as sprint: false", () => {
+  const world = flatFloorWorld();
+  const noField = stepPlayer(world, createPlayer(5, 1, 5), { moveX: 1, moveZ: 0, jump: false }, 0.1);
+  const explicitFalse = stepPlayer(world, createPlayer(5, 1, 5), { moveX: 1, moveZ: 0, jump: false, sprint: false }, 0.1);
+  assert.equal(noField.vx, explicitFalse.vx);
 });

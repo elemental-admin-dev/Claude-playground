@@ -691,8 +691,9 @@ function animate(now) {
       moveX /= len;
       moveZ /= len;
     }
+    const sprint = keys.has("ShiftLeft") || keys.has("ShiftRight");
     const wasOnGround = player.onGround;
-    player = stepPlayer(world, player, { moveX, moveZ, jump: keys.has("Space") }, dt);
+    player = stepPlayer(world, player, { moveX, moveZ, jump: keys.has("Space"), sprint }, dt);
     if (wasOnGround && !player.onGround && player.vy > 0) playSound("jump");
   }
 
