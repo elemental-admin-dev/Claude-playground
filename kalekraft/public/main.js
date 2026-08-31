@@ -12,6 +12,7 @@ import { SHARED_WORLD_SEED } from "./config.js";
 import { damp, dampAngle } from "./interp.js";
 import { getPreset } from "./audio.js";
 import { timeOfDay, sunDirection, ambientIntensity, sunIntensity, skyColor } from "./daynight.js";
+import { buildMinimapGrid } from "./minimap.js";
 
 const SAVE_KEY = "kalekraft-save-v4";
 const REACH = 6;
@@ -685,12 +686,44 @@ let fpsAccumulator = 0;
 let fpsFrames = 0;
 let fpsDisplay = 0;
 
+// -------------------------------------------------------------- minimap
+
+const MINIMAP_RADIUS = 24;
+const MINIMAP_SIZE = MINIMAP_RADIUS * 2 + 1;
+const MINIMAP_UPDATE_INTERVAL = 0.5; // seconds; a full rescan every frame would be wasteful
+const minimapCanvas = document.getElementById("minimap");
+const minimapCtx = minimapCanvas.getContext("2d");
+minimapCanvas.width = MINIMAP_SIZE;
+minimapCanvas.height = MINIMAP_SIZE;
+let minimapAccumulator = Infinity; // force a first draw on the very first frame
+
+function updateMinimap(dt) {
+  minimapAccumulator += dt;
+  if (minimapAccumulator < MINIMAP_UPDATE_INTERVAL) return;
+  minimapAccumulator = 0;
+
+  const grid = buildMinimapGrid(world, player.x, player.z, MINIMAP_RADIUS);
+  const image = minimapCtx.createImageData(MINIMAP_SIZE, MINIMAP_SIZE);
+  for (let i = 0; i < grid.length; i++) {
+    const [r, g, b] = grid[i];
+    image.data[i * 4] = Math.round(r * 255);
+    image.data[i * 4 + 1] = Math.round(g * 255);
+    image.data[i * 4 + 2] = Math.round(b * 255);
+    image.data[i * 4 + 3] = 255;
+  }
+  minimapCtx.putImageData(image, 0, 0);
+
+  minimapCtx.fillStyle = "#ffffff";
+  minimapCtx.fillRect(MINIMAP_RADIUS, MINIMAP_RADIUS, 1, 1); // the player, always dead center
+}
+
 function animate(now) {
   requestAnimationFrame(animate);
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
   updateDayNight();
+  updateMinimap(dt);
   updateChunkStreaming();
   processChunkQueue();
   updateMobs(dt);

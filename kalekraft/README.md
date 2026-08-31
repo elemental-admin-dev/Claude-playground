@@ -8,9 +8,9 @@ inventory, spend one to place it), crafting raw blocks into refined ones,
 a shared multiplayer world — anyone who opens the page walks the same
 terrain and sees the same edits, live — and a few procedurally synthesized
 sound effects (no audio files) for breaking, placing, jumping, and
-crafting, and a day/night cycle (10 real minutes per full day) that
-brightens and dims the sky and lighting as the sun rises and sets.
-Rendered with Three.js.
+crafting, a day/night cycle (10 real minutes per full day) that
+brightens and dims the sky and lighting as the sun rises and sets, and a
+top-down minimap showing the terrain around you. Rendered with Three.js.
 
 ## Run
 
@@ -149,6 +149,15 @@ any terrain, only the sparse diff.
   every client independently computes the same sky at the same wall-clock
   moment, so everyone in the shared world sees the same time of day with
   no server sync needed.
+- `minimap.js` — pure top-down minimap logic: for a column at any (x, z),
+  scan down from the top of the world for the first non-air block (water
+  counts as a visible surface, not something to see through) and look up
+  its existing render color from `blocks.js`, then lay out a square grid
+  of those colors centered on the player. No canvas dependency, so it's
+  unit-testable without a browser; `main.js` rescans a 49x49 area around
+  the player twice a second (not every frame - a full rescan is not
+  cheap) and paints the grid onto a small `<canvas>` via `putImageData`,
+  with the player as a fixed white dot at dead center.
 - `audio.js` — sound "recipes" (type, duration, frequency/notes, gain) for
   break/place/jump/craft, as plain data with no `AudioContext` dependency,
   so the presets are unit-testable without a browser. The actual synthesis
@@ -185,7 +194,8 @@ generation/raycasting (including determinism across chunk and negative
 coordinates, and boundary-straddling trees), procedural textures, mesh
 face-culling and UV mapping, inventory accounting, crafting recipes,
 frame-rate-independent damping (including angle wraparound), sound preset
-data, day/night cycle lighting/color math, shared physics, and player/mob
+data, day/night cycle lighting/color math, minimap column-scanning and
+color layout, shared physics, and player/mob
 movement (including that mob AI is deterministic for a given rng) — the
 entire simulation core, with no browser or WebGL required.
 

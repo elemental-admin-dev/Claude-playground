@@ -37,6 +37,19 @@ html, body {
   line-height: 1.4;
 }
 
+#minimap {
+  position: fixed;
+  top: 56px;
+  left: 10px;
+  width: 128px;
+  height: 128px;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: #05050f;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
 #hotbar {
   position: fixed;
   bottom: 16px;
