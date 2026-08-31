@@ -7,7 +7,7 @@ import { KINDS, TILE_SIZE, pixelColor } from "./textures.js";
 import { Inventory } from "./inventory.js";
 import { createMob, stepMob, HALF_WIDTH as MOB_HALF_WIDTH, HEIGHT as MOB_HEIGHT } from "./mob.js";
 import { HALF_WIDTH as PLAYER_HALF_WIDTH, HEIGHT as PLAYER_HEIGHT } from "./player.js";
-import { RECIPES, craft } from "./crafting.js";
+import { RECIPES, craft, craftMax } from "./crafting.js";
 import { SHARED_WORLD_SEED } from "./config.js";
 import { damp, dampAngle } from "./interp.js";
 import { getPreset } from "./audio.js";
@@ -426,7 +426,7 @@ window.addEventListener("keydown", (e) => {
   if (e.repeat) return; // one-shot actions below should fire once per press, not per OS auto-repeat tick
   if (e.code === "KeyN") newWorld();
   if (e.code === "KeyC") toggleCraftingPanel();
-  tryCraftFromKey(e.code);
+  tryCraftFromKey(e.code, e.shiftKey);
   const digit = Number(e.key);
   if (digit >= 1 && digit <= HOTBAR_BLOCKS.length) selectBlock(HOTBAR_BLOCKS[digit - 1]);
 });
@@ -664,10 +664,15 @@ function toggleCraftingPanel() {
   craftingPanel.classList.toggle("hidden");
 }
 
-function tryCraftFromKey(code) {
+function tryCraftFromKey(code, bulk = false) {
   const index = CRAFT_KEYS.indexOf(code);
   if (index === -1) return;
-  if (craft(inventory, RECIPES[index].id)) {
+  const recipeId = RECIPES[index].id;
+  // Shift+craft-key crafts as many as the inventory allows in one press
+  // instead of one at a time - handy once you're holding a big stack of
+  // raw material and don't want to mash the key.
+  const crafted = bulk ? craftMax(inventory, recipeId) : craft(inventory, recipeId) ? 1 : 0;
+  if (crafted > 0) {
     updateHotbarCounts();
     updateCraftingPanel();
     playSound("craft");

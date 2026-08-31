@@ -32,4 +32,17 @@ function craft(inventory, recipeId) {
   return true;
 }
 
-export { RECIPES, getRecipe, canCraft, craft };
+/**
+ * Crafts `recipeId` repeatedly - as many times as the current inventory
+ * allows in one call - stopping the moment there isn't enough of an input
+ * left. Returns how many times it crafted (0 if not even once). Useful
+ * for a "bulk craft" input that turns a whole stack of raw material into
+ * its refined form in one keypress instead of one unit at a time.
+ */
+function craftMax(inventory, recipeId) {
+  let count = 0;
+  while (craft(inventory, recipeId)) count++;
+  return count;
+}
+
+export { RECIPES, getRecipe, canCraft, craft, craftMax };

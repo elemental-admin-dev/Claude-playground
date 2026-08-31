@@ -35,6 +35,7 @@ you're in.
 | `1`-`9` | Select a hotbar block |
 | `C` | Toggle the crafting panel |
 | `Z` / `X` / `V` | Craft Planks / Brick / Glass (works whether the panel is open or not) |
+| `Shift` + `Z`/`X`/`V` | Bulk craft: repeats that recipe until an input runs out, in one press |
 | `Esc` | Release the mouse (auto-saves) |
 | `N` | Discard your local edits and resync to the shared world |
 
@@ -133,6 +134,8 @@ any terrain, only the sparse diff.
   checks and spends the inputs and grants the output in one step, a no-op
   if you're short on materials. No furnace/heat mechanic — these are
   simplified stand-ins for what would normally need smelting.
+  `craftMax(inventory, recipeId)` repeats `craft` until an input runs out
+  and returns how many times it fired, for a "bulk craft" keybind.
 - `interp.js` — frame-rate-independent exponential easing (`damp`) toward a
   target value, plus an angle-aware variant (`dampAngle`) that always turns
   the short way around. Used to smooth remote players' rendered position
