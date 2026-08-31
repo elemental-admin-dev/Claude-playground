@@ -186,6 +186,22 @@ class World {
     return null;
   }
 
+  /**
+   * Merges one server-sent dirty chunk (in the same {cx, cz, runs} shape
+   * `serialize()` produces) into this world, overwriting whatever this
+   * world already had for that chunk. Used for multiplayer catch-up: a
+   * newly-connected client already has its own freshly-generated world
+   * from the shared seed, and just needs edits made by others before it
+   * connected layered on top — a full deserialize() would throw away any
+   * local state instead of merging into it.
+   */
+  applyDirtyChunk({ cx, cz, runs }) {
+    const chunk = new Chunk(cx, cz, this.chunkSize, this.chunkHeight);
+    rleDecodeInto(chunk.blocks, runs);
+    chunk.dirty = true;
+    this.chunks.set(this.chunkKey(cx, cz), chunk);
+  }
+
   /** Only edited ("dirty") chunks are saved; everything else regenerates identically from the seed. */
   serialize() {
     const dirtyChunks = [];

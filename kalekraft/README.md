@@ -62,13 +62,17 @@ meshes, not the whole world.
 
 **Multiplayer works because the seed is shared, not because the world is
 synced.** Every client generates identical terrain from the same fixed
-`SHARED_WORLD_SEED`, so the server never needs to hold or transmit any
-terrain — it's a pure relay that forwards two kinds of events between
-clients: block edits (so everyone's `world.setBlock` stays in sync) and
-player positions (for avatars). That's a deliberate, much smaller problem
-than syncing an entire voxel world, and it's why a player who joins
-mid-session won't see edits made before they connected — the server never
-recorded them, only relayed them live.
+`SHARED_WORLD_SEED` (`config.js`), so the server never needs to hold or
+transmit any *terrain* — only *edits*. It keeps its own authoritative
+`World` (with `autoGenerate: false`, so it's purely a sparse record of
+what's been changed) and relays two kinds of events between clients: block
+edits (applied to the server's World, then broadcast, so everyone's
+`world.setBlock` stays in sync) and player positions (for avatars). A
+newly-connecting client gets that authoritative World's dirty chunks in
+its `init` message and merges them into its own already-generated world
+via `world.applyDirtyChunk()` — so a late joiner does see edits made
+before they connected, without the server ever having to transmit or hold
+any terrain, only the sparse diff.
 
 - `noise.js` — deterministic seeded 2D value noise + fBm, used for terrain
   heightmaps. No external noise library.
@@ -88,9 +92,13 @@ recorded them, only relayed them live.
   it.
 - `world.js` — the chunk manager: generates/caches chunks on demand,
   routes `getBlock`/`setBlock` to the right one, a DDA voxel raycaster for
-  block targeting (chunk-boundary-agnostic), and save/load that only
-  persists chunks a player has actually edited — everything else
-  regenerates identically from the seed.
+  block targeting (chunk-boundary-agnostic), save/load that only persists
+  chunks a player has actually edited (everything else regenerates
+  identically from the seed), and `applyDirtyChunk()` for merging a
+  server-sent edit into an existing world without discarding the rest of
+  it — the multiplayer catch-up path.
+- `config.js` — the one constant (`SHARED_WORLD_SEED`) both `main.js` and
+  `server.js` import, so client and server terrain can never drift apart.
 - `mesh.js` — turns one chunk into typed-array mesh data (positions,
   normals, vertex colors, UVs, indices), culling faces between two opaque
   blocks (including across a chunk boundary, via `world.getBlock`) and
@@ -129,8 +137,10 @@ recorded them, only relayed them live.
 - `server.js` — Express serving `public/` as static files (plus Three's
   module build, so the client can `import "three"` via an import map with
   no bundler or CDN dependency) and a `ws` WebSocket server that relays
-  edit/move/leave events between connected clients — see the multiplayer
-  note above for why it holds no world state of its own.
+  edit/move/leave events between connected clients. Holds its own
+  authoritative `World` (edits only, never generates terrain) purely to
+  answer the question "what's changed?" for a newly-connecting client —
+  see the multiplayer note above.
 
 ## Test
 
@@ -152,11 +162,14 @@ This is a tech-demo scale sandbox, not a game: only 3 crafting recipes
 (planks/brick/glass) and no deeper progression (tools, armor, multi-step
 chains), and mobs are purely decorative and unsynced — each
 client's mobs wander independently, with no interaction with the player,
-each other, or combat. Multiplayer is real but intentionally minimal: no
-catch-up sync for late joiners (see above), no chat, no player-vs-player
-interaction beyond seeing each other move, remote avatars snap to each
-position update rather than interpolating (choppy at the ~10Hz broadcast
-rate), and inventories are per-client, not shared. Anything taller than a
+each other, or combat. Multiplayer is real but intentionally minimal: no chat, no player-vs-player
+interaction beyond seeing each other move and each other's edits, remote
+avatars snap to each position update rather than interpolating (choppy at
+the ~10Hz broadcast rate), and inventories are per-client, not shared. The
+server's authoritative World (edits only) also grows unboundedly over a
+long-running server's uptime, the same tradeoff `evictFarChunks` solves on
+the client but that doesn't apply server-side, since it has no player
+position to measure "far" from. Anything taller than a
 single block (a tree trunk, a cliff face) still fully blocks walking into
 it — jump over it or go around; single-block ledges auto-step. The world
 itself is no longer the limiting factor: chunks stream in as you

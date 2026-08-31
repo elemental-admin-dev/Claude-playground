@@ -102,6 +102,33 @@ test("serialize/deserialize round-trips edited chunks exactly", () => {
   assert.equal(restored.getBlock(20, 5, 2), BLOCKS.WOOD);
 });
 
+test("applyDirtyChunk merges a server-sent edit into an existing world without discarding other chunks", () => {
+  const seed = 7;
+  const source = new World(seed, { chunkSize: 8, chunkHeight: 24 });
+  source.setBlock(20, 5, 2, BLOCKS.WOOD); // chunk (2, 0)
+  const [dirtyChunk] = source.serialize().dirtyChunks;
+
+  const client = new World(seed, { chunkSize: 8, chunkHeight: 24 });
+  client.setBlock(2, 5, 2, BLOCKS.STONE); // client's own unrelated local edit, chunk (0,0)
+  client.applyDirtyChunk(dirtyChunk);
+
+  assert.equal(client.getBlock(20, 5, 2), BLOCKS.WOOD); // caught up from the "server"
+  assert.equal(client.getBlock(2, 5, 2), BLOCKS.STONE); // client's own edit preserved
+});
+
+test("applyDirtyChunk overwrites the client's own prior state for that chunk", () => {
+  const seed = 9;
+  const client = new World(seed, { chunkSize: 8, chunkHeight: 24 });
+  client.setBlock(1, 1, 1, BLOCKS.STONE); // chunk (0,0), will be overwritten
+
+  const authoritative = new World(seed, { chunkSize: 8, chunkHeight: 24 });
+  authoritative.setBlock(1, 1, 1, BLOCKS.WOOD);
+  const [dirtyChunk] = authoritative.serialize().dirtyChunks;
+
+  client.applyDirtyChunk(dirtyChunk);
+  assert.equal(client.getBlock(1, 1, 1), BLOCKS.WOOD);
+});
+
 test("unedited chunks are not saved, but regenerate identically from the seed", () => {
   const world = new World(11, { chunkSize: 8, chunkHeight: 24 });
   world.getBlock(50, 0, 50); // touch a chunk without editing it

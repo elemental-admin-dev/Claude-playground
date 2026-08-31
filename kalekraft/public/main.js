@@ -8,6 +8,7 @@ import { Inventory } from "./inventory.js";
 import { createMob, stepMob, HALF_WIDTH as MOB_HALF_WIDTH, HEIGHT as MOB_HEIGHT } from "./mob.js";
 import { HALF_WIDTH as PLAYER_HALF_WIDTH, HEIGHT as PLAYER_HEIGHT } from "./player.js";
 import { RECIPES, craft } from "./crafting.js";
+import { SHARED_WORLD_SEED } from "./config.js";
 
 const SAVE_KEY = "kalekraft-save-v4";
 const REACH = 6;
@@ -20,9 +21,6 @@ const MOB_SPAWN_RADIUS = 12; // blocks, around the player's spawn point
 // halo past it) so a chunk isn't evicted and immediately regenerated as the
 // player wanders back and forth near the render-distance edge.
 const EVICT_DISTANCE = RENDER_DISTANCE + 3;
-// Fixed (not random) so every client generates identical terrain and the
-// world is genuinely shared — see server.js for what that trades away.
-const SHARED_WORLD_SEED = 1337;
 const MOVE_BROADCAST_MS = 100; // ~10Hz
 
 // ---------------------------------------------------------------- world/save
@@ -340,6 +338,13 @@ function connectMultiplayer() {
     if (msg.type === "init") {
       myPlayerId = msg.playerId;
       for (const p of msg.others) upsertRemotePlayer(p.id, p.x, p.y, p.z, p.yaw);
+      // Catch-up: the server's authoritative dirty chunks, for edits made
+      // before we connected. Merge into our own world rather than
+      // replacing it, so our own local edits survive.
+      for (const dirtyChunk of msg.dirtyChunks ?? []) {
+        world.applyDirtyChunk(dirtyChunk);
+        remeshIfLoaded(dirtyChunk.cx, dirtyChunk.cz);
+      }
     } else if (msg.type === "move") {
       upsertRemotePlayer(msg.playerId, msg.x, msg.y, msg.z, msg.yaw);
     } else if (msg.type === "edit") {
