@@ -128,11 +128,12 @@ const sun = new THREE.DirectionalLight(0xffffff, 0.75);
 sun.position.set(0.6, 1, 0.4);
 scene.add(sun);
 
-let dayNightElapsed = 0;
-
-function updateDayNight(dt) {
-  dayNightElapsed += dt;
-  const t = timeOfDay(dayNightElapsed);
+function updateDayNight() {
+  // Derived from wall-clock time, not a per-session counter, so every
+  // client in the shared world sees the same sky at the same moment (the
+  // same trick as SHARED_WORLD_SEED for terrain: no network sync needed
+  // when everyone can independently compute the same answer).
+  const t = timeOfDay(Date.now() / 1000);
   ambientLight.intensity = ambientIntensity(t);
   sun.intensity = sunIntensity(t);
   const dir = sunDirection(t);
@@ -689,7 +690,7 @@ function animate(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
-  updateDayNight(dt);
+  updateDayNight();
   updateChunkStreaming();
   processChunkQueue();
   updateMobs(dt);

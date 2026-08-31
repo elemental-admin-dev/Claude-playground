@@ -36,7 +36,9 @@ function sunHeight(t) {
 /** A unit-ish direction for the sun's DirectionalLight to shine from. */
 function sunDirection(t) {
   const angle = 2 * Math.PI * (t - 0.25);
-  return { x: Math.cos(angle), y: Math.sin(angle), z: 0.35 };
+  // y reuses sunHeight(t) itself (same sin) so the two can never drift apart
+  // if one of them is ever tweaked without the other.
+  return { x: Math.cos(angle), y: sunHeight(t), z: 0.35 };
 }
 
 // How much of the sun's height maps into "fully day" - keeps a little

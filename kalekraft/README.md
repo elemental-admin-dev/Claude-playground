@@ -144,7 +144,11 @@ any terrain, only the sparse diff.
   dependency. A full cycle is 10 real minutes; night never goes fully
   dark (ambient light has a floor) and the sky picks up a warm tint
   around sunrise/sunset. `main.js` applies the numbers to the scene,
-  fog, and lights every frame.
+  fog, and lights every frame, driven by `Date.now()` rather than a
+  per-session timer - the same trick as `SHARED_WORLD_SEED` for terrain:
+  every client independently computes the same sky at the same wall-clock
+  moment, so everyone in the shared world sees the same time of day with
+  no server sync needed.
 - `audio.js` — sound "recipes" (type, duration, frequency/notes, gain) for
   break/place/jump/craft, as plain data with no `AudioContext` dependency,
   so the presets are unit-testable without a browser. The actual synthesis
