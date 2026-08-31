@@ -45,7 +45,12 @@ function loadSavedState() {
 
 function saveState() {
   try {
-    fs.writeFileSync(SAVE_FILE, serializeState(board, tickNumber, nextTickAt));
+    // Write-then-rename instead of an in-place write, so a save that's
+    // interrupted mid-flush (SIGKILL, OOM) leaves the previous save file
+    // intact rather than a truncated, unloadable one.
+    const tmpFile = `${SAVE_FILE}.tmp`;
+    fs.writeFileSync(tmpFile, serializeState(board, tickNumber, nextTickAt));
+    fs.renameSync(tmpFile, SAVE_FILE);
   } catch (err) {
     console.warn("multiplayer-life: couldn't save state:", err.message);
   }
@@ -54,7 +59,12 @@ function saveState() {
 const saved = loadSavedState();
 let board = saved ? saved.board : createBoard(WIDTH, HEIGHT, randomSeed(WIDTH, HEIGHT, SEED_DENSITY));
 let tickNumber = saved ? saved.tickNumber : 0;
-let nextTickAt = saved ? saved.nextTickAt : Date.now() + TICK_MS;
+// Always scheduled relative to *this* startup, not the saved value: the
+// setInterval below always starts a fresh TICK_MS countdown at boot, so a
+// restored nextTickAt from before a restart would be stale (already in the
+// past, or ahead of when the timer will actually fire) and desync the
+// countdown clients display from when the tick server-side actually happens.
+let nextTickAt = Date.now() + TICK_MS;
 const cooldown = new CooldownTracker(COOLDOWN_MS);
 
 const app = express();

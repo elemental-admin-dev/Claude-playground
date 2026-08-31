@@ -17,7 +17,12 @@ function serializeState(board, tickNumber, nextTickAt) {
   });
 }
 
-/** Throws if `json` isn't a valid saved state; never returns a partial/corrupt result. */
+/**
+ * Throws if `json` isn't parseable or is missing/has the wrong type for a
+ * required field. Individual malformed or out-of-bounds cell entries are
+ * dropped rather than thrown on, so the result can still omit cells that
+ * were present but invalid in the input.
+ */
 function deserializeState(json) {
   const data = JSON.parse(json);
   if (
