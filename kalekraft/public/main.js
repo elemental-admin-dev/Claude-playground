@@ -11,6 +11,7 @@ import { RECIPES, craft } from "./crafting.js";
 import { SHARED_WORLD_SEED } from "./config.js";
 import { damp, dampAngle } from "./interp.js";
 import { getPreset } from "./audio.js";
+import { timeOfDay, sunDirection, ambientIntensity, sunIntensity, skyColor } from "./daynight.js";
 
 const SAVE_KEY = "kalekraft-save-v4";
 const REACH = 6;
@@ -121,10 +122,25 @@ scene.fog = new THREE.Fog(0x87ceeb, fogFar * 0.45, fogFar);
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
 camera.rotation.order = "YXZ";
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.75);
 sun.position.set(0.6, 1, 0.4);
 scene.add(sun);
+
+let dayNightElapsed = 0;
+
+function updateDayNight(dt) {
+  dayNightElapsed += dt;
+  const t = timeOfDay(dayNightElapsed);
+  ambientLight.intensity = ambientIntensity(t);
+  sun.intensity = sunIntensity(t);
+  const dir = sunDirection(t);
+  sun.position.set(dir.x, dir.y, dir.z);
+  const sky = skyColor(t);
+  scene.background.setRGB(sky.r, sky.g, sky.b);
+  scene.fog.color.setRGB(sky.r, sky.g, sky.b);
+}
 
 function buildTextureAtlas() {
   const atlasCanvas = document.createElement("canvas");
@@ -673,6 +689,7 @@ function animate(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
+  updateDayNight(dt);
   updateChunkStreaming();
   processChunkQueue();
   updateMobs(dt);

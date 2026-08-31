@@ -8,7 +8,9 @@ inventory, spend one to place it), crafting raw blocks into refined ones,
 a shared multiplayer world — anyone who opens the page walks the same
 terrain and sees the same edits, live — and a few procedurally synthesized
 sound effects (no audio files) for breaking, placing, jumping, and
-crafting. Rendered with Three.js.
+crafting, and a day/night cycle (10 real minutes per full day) that
+brightens and dims the sky and lighting as the sun rises and sets.
+Rendered with Three.js.
 
 ## Run
 
@@ -136,6 +138,13 @@ any terrain, only the sparse diff.
   the short way around. Used to smooth remote players' rendered position
   between the sparse (~10Hz) multiplayer position updates instead of
   visibly snapping to each one.
+- `daynight.js` — pure day/night cycle math: elapsed seconds -> a
+  time-of-day fraction, the sun's height/direction, ambient and sun-light
+  intensity, and sky color, all as plain functions with no THREE.js
+  dependency. A full cycle is 10 real minutes; night never goes fully
+  dark (ambient light has a floor) and the sky picks up a warm tint
+  around sunrise/sunset. `main.js` applies the numbers to the scene,
+  fog, and lights every frame.
 - `audio.js` — sound "recipes" (type, duration, frequency/notes, gain) for
   break/place/jump/craft, as plain data with no `AudioContext` dependency,
   so the presets are unit-testable without a browser. The actual synthesis
@@ -172,9 +181,9 @@ generation/raycasting (including determinism across chunk and negative
 coordinates, and boundary-straddling trees), procedural textures, mesh
 face-culling and UV mapping, inventory accounting, crafting recipes,
 frame-rate-independent damping (including angle wraparound), sound preset
-data, shared physics, and player/mob movement (including that mob AI is
-deterministic for a given rng) — the entire simulation core, with no
-browser or WebGL required.
+data, day/night cycle lighting/color math, shared physics, and player/mob
+movement (including that mob AI is deterministic for a given rng) — the
+entire simulation core, with no browser or WebGL required.
 
 ## Limitations
 
