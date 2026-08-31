@@ -15,6 +15,7 @@ let live = new Set();
 let nextTickAt = 0;
 let cooldownUntil = 0;
 let cooldownMs = 60_000;
+let hoverCell = null; // { x, y } | null - the cell under the mouse, or none
 
 function cellKey(x, y) {
   return `${x},${y}`;
@@ -27,6 +28,16 @@ function draw() {
   for (const key of live) {
     const [x, y] = key.split(",").map(Number);
     ctx.fillRect(x * CELL_SIZE + 1, y * CELL_SIZE + 1, CELL_SIZE - 1, CELL_SIZE - 1);
+  }
+
+  if (hoverCell) {
+    // Green while a click would register, red while on cooldown - so the
+    // outline itself tells you whether hovering is actionable right now,
+    // not just which cell it is.
+    const onCooldown = Date.now() < cooldownUntil;
+    ctx.strokeStyle = onCooldown ? "#e65e5e" : "#5ee6a8";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(hoverCell.x * CELL_SIZE + 1, hoverCell.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
   }
 }
 
@@ -55,6 +66,11 @@ function updateCountdowns() {
     cooldownCountdownEl.classList.remove("ready");
     canvas.classList.add("locked");
   }
+
+  // Keeps the hover highlight's red/green color in sync with the cooldown
+  // even if the mouse hasn't moved since it expired - otherwise it can sit
+  // stuck red for a moment after a click actually becomes clickable again.
+  if (hoverCell) draw();
 }
 setInterval(updateCountdowns, 250);
 
@@ -114,15 +130,27 @@ function connect() {
   });
 }
 
+canvas.addEventListener("mousemove", (event) => {
+  const rect = canvas.getBoundingClientRect();
+  const { x, y } = screenToCell(event.clientX, event.clientY, rect, canvas.width, canvas.height, CELL_SIZE);
+  const next = inBounds(x, y, width, height) ? { x, y } : null;
+  if (hoverCell?.x === next?.x && hoverCell?.y === next?.y) return; // no change, skip the redraw
+  hoverCell = next;
+  draw();
+});
+
+canvas.addEventListener("mouseleave", () => {
+  if (!hoverCell) return;
+  hoverCell = null;
+  draw();
+});
+
 canvas.addEventListener("click", (event) => {
   if (!ws || ws.readyState !== WebSocket.OPEN) return; // no live connection to send the click on
   if (Date.now() < cooldownUntil) return;
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const x = Math.floor(((event.clientX - rect.left) * scaleX) / CELL_SIZE);
-  const y = Math.floor(((event.clientY - rect.top) * scaleY) / CELL_SIZE);
-  if (x < 0 || x >= width || y < 0 || y >= height) return;
+  const { x, y } = screenToCell(event.clientX, event.clientY, rect, canvas.width, canvas.height, CELL_SIZE);
+  if (!inBounds(x, y, width, height)) return;
 
   ws.send(JSON.stringify({ type: "toggle", x, y }));
   // Optimistic lock; the server's "cooldown" or "denied" reply corrects this if needed.

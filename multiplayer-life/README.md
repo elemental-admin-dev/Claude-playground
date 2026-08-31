@@ -77,9 +77,18 @@ TICK_MS=10000 COOLDOWN_MS=5000 npm start
   on `SIGINT`/`SIGTERM`, so a restart resumes the shared board instead of
   reseeding it randomly. `nextTickAt` is always computed fresh relative to
   this startup, never resumed from the save file.
+- `public/coords.js` — pure canvas-pixel <-> grid-cell coordinate math
+  (`screenToCell`, `inBounds`), used by both the click handler and the
+  hover highlight so they always agree on which cell a mouse event lands
+  on. Loaded as a plain `<script>` before `client.js` (its functions
+  become globals, like everything else here - no bundler, no import
+  map), and via `require()` in tests.
 - `public/` — a canvas-based client. It renders the board, shows a
-  countdown to the next tick and to the viewer's own cooldown, and sends
-  `toggle` messages over the WebSocket on click.
+  countdown to the next tick and to the viewer's own cooldown, sends
+  `toggle` messages over the WebSocket on click, and outlines the cell
+  under the mouse - green while a click would register, red while your
+  cooldown is still running - so you always know exactly which cell
+  you're about to toggle and whether it'll actually take effect.
 
 Cooldowns are currently keyed by socket IP address, which is enough to
 stop casual abuse on a single-host demo but is not a substitute for real
@@ -97,5 +106,6 @@ npm test
 ```
 
 Runs the unit tests for the board, cooldown, persistence format, env-var
-parsing, and the save-file load/save path (against a real temp directory)
-with Node's built-in test runner (`node --test`).
+parsing, the save-file load/save path (against a real temp directory), and
+the client's coordinate math, with Node's built-in test runner
+(`node --test`).
