@@ -2,9 +2,21 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from life import Board, GLIDER, PULSAR, PATTERNS, save_pattern, load_pattern, _centered_offset
+from life import (
+    Board,
+    GLIDER,
+    PULSAR,
+    PATTERNS,
+    save_pattern,
+    load_pattern,
+    _centered_offset,
+    _resolve_dimensions,
+    parse_args,
+)
 
 
 def test_still_life_block_is_stable():
@@ -110,3 +122,41 @@ def test_loading_a_saved_board_onto_a_smaller_board_clips_out_of_range_cells():
         assert loaded.population() == len(loaded.live_cells)
     finally:
         os.remove(path)
+
+
+def test_resolve_dimensions_fills_in_only_unset_values():
+    width, height = _resolve_dimensions(10, 20)
+    assert (width, height) == (10, 20)
+
+
+def test_resolve_dimensions_honors_an_explicit_zero_instead_of_treating_it_as_unset():
+    # A falsy-zero check would silently replace 0 with the terminal size;
+    # None is the only value that should trigger that fallback.
+    width, height = _resolve_dimensions(0, 20)
+    assert width == 0
+    assert height == 20
+
+    width, height = _resolve_dimensions(10, 0)
+    assert width == 10
+    assert height == 0
+
+
+def test_resolve_dimensions_falls_back_to_terminal_size_when_unset():
+    width, height = _resolve_dimensions(None, None)
+    assert width > 0
+    assert height > 0
+
+
+def test_parse_args_rejects_a_negative_interval():
+    with pytest.raises(SystemExit):
+        parse_args(["--interval", "-1"])
+
+
+def test_parse_args_accepts_a_zero_interval():
+    args = parse_args(["--interval", "0"])
+    assert args.interval == 0.0
+
+
+def test_parse_args_accepts_a_positive_interval():
+    args = parse_args(["--interval", "0.5"])
+    assert args.interval == 0.5

@@ -142,12 +142,18 @@ def _centered_offset(pattern: str, width: int, height: int) -> tuple[int, int]:
     return max((width - pattern_w) // 2, 0), max((height - pattern_h) // 2, 0)
 
 
-def run(args: argparse.Namespace) -> None:
-    width, height = args.width, args.height
+def _resolve_dimensions(width: int | None, height: int | None) -> tuple[int, int]:
+    """Fill in unset (None) width/height from the terminal size. An explicitly
+    passed 0 (or any other non-None value) is honored, not treated as unset."""
     if width is None or height is None:
         term_w, term_h = _terminal_size()
-        width = width or term_w
-        height = height or term_h
+        width = term_w if width is None else width
+        height = term_h if height is None else height
+    return width, height
+
+
+def run(args: argparse.Namespace) -> None:
+    width, height = _resolve_dimensions(args.width, args.height)
 
     if args.load:
         board = load_pattern(args.load, width, height)
@@ -179,13 +185,20 @@ def run(args: argparse.Namespace) -> None:
             save_pattern(board, args.save)
 
 
+def _non_negative_float(value: str) -> float:
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError(f"must be non-negative, got {value!r}")
+    return parsed
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Conway's Game of Life in your terminal.")
     parser.add_argument("--width", type=int, default=None, help="board width (default: terminal width)")
     parser.add_argument("--height", type=int, default=None, help="board height (default: terminal height)")
     parser.add_argument("--density", type=float, default=0.3, help="initial live-cell density for random boards")
     parser.add_argument("--seed", type=int, default=None, help="random seed")
-    parser.add_argument("--interval", type=float, default=0.1, help="seconds between generations")
+    parser.add_argument("--interval", type=_non_negative_float, default=0.1, help="seconds between generations")
     parser.add_argument("--generations", type=int, default=None, help="stop after N generations (default: run until stable or interrupted)")
     parser.add_argument("--pattern", choices=["random", *PATTERNS], default="random", help="initial pattern")
     parser.add_argument("--load", type=str, default=None, help="load initial pattern from a plaintext file (# alive, . dead)")
