@@ -29,6 +29,8 @@ Environment variables, all optional:
 | `BOARD_HEIGHT` | `40`    | Board height in cells                 |
 | `TICK_MS`      | `300000`| Milliseconds between simulation ticks |
 | `COOLDOWN_MS`  | `60000` | Milliseconds a client must wait between placements |
+| `SAVE_FILE`    | `./board-save.json` | Path the board autosaves to and resumes from |
+| `SAVE_INTERVAL_MS` | `30000` | Milliseconds between autosaves |
 
 For a quick local demo with a fast pace:
 
@@ -42,9 +44,17 @@ TICK_MS=10000 COOLDOWN_MS=5000 npm start
   generation). No I/O, easy to unit test.
 - `lib/cooldown.js` — a small per-key rate limiter used to enforce the
   1-minute placement cooldown.
+- `lib/persistence.js` — pure (no `fs`) serialize/deserialize of the board's
+  save format (cells, tick number, next-tick time), so it's unit-testable
+  without touching disk; validates and drops any malformed or
+  out-of-bounds cell entries instead of trusting the file blindly.
 - `server.js` — Express serves the static client; a `ws` WebSocket server
   broadcasts board state, applies placements (after checking the cooldown
-  tracker), and runs the 5-minute tick loop with `setInterval`.
+  tracker), and runs the 5-minute tick loop with `setInterval`. Also loads
+  `lib/persistence.js`'s save file on startup (if its dimensions match the
+  configured board size) and autosaves periodically, after every tick, and
+  on `SIGINT`/`SIGTERM`, so a restart resumes the shared board instead of
+  reseeding it randomly.
 - `public/` — a canvas-based client. It renders the board, shows a
   countdown to the next tick and to the viewer's own cooldown, and sends
   `toggle` messages over the WebSocket on click.
@@ -53,7 +63,10 @@ Cooldowns are currently keyed by socket IP address, which is enough to
 stop casual abuse on a single-host demo but is not a substitute for real
 auth/rate-limiting in a public deployment (a proxy would need to forward
 the real client IP via `X-Forwarded-For`, and a determined user could
-still spoof it). Board state is in-memory only and resets on restart.
+still spoof it). Board state survives a restart via periodic autosave to
+`SAVE_FILE` (see Configuration) as long as `BOARD_WIDTH`/`BOARD_HEIGHT`
+don't change between runs; if they do, or the save file is missing or
+unreadable, the server falls back to a fresh randomly-seeded board.
 
 ## Test
 
