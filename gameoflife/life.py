@@ -188,26 +188,47 @@ def _resolve_dimensions(width: int | None, height: int | None) -> tuple[int, int
     return width, height
 
 
+def _selected_source(args: argparse.Namespace) -> tuple[str, str] | None:
+    """Resolves --load/--pattern to a ("load", path) or ("pattern", name)
+    tuple, honoring the same precedence (a --load file wins over --pattern)
+    wherever a starting shape is needed. --preview and the simulation
+    setup below both call this for the precedence *decision*, instead of
+    each hand-rolling the same if-load/elif-pattern/else check and risking
+    the two silently drifting apart - but each still builds its own Board
+    differently (a loaded save file already encodes the whole board's
+    absolute layout and must be placed at the origin, not re-centered like
+    a named pattern), so the actual construction isn't shared. None means
+    the random pattern was selected: it has no fixed shape at all.
+    """
+    if args.load:
+        return "load", args.load
+    if args.pattern in PATTERNS:
+        return "pattern", args.pattern
+    return None
+
+
 def run(args: argparse.Namespace) -> None:
+    source = _selected_source(args)
+
     if args.preview:
-        if args.load:
-            with open(args.load) as f:
-                sys.stdout.write(preview_pattern(f.read(), args.load))
-        elif args.pattern in PATTERNS:
-            sys.stdout.write(preview_pattern(PATTERNS[args.pattern], args.pattern))
-        else:
+        if source is None:
             sys.stdout.write("--preview needs --pattern <name> or --load <file> (not 'random').\n")
+        elif source[0] == "load":
+            with open(source[1]) as f:
+                sys.stdout.write(preview_pattern(f.read(), source[1]))
+        else:
+            sys.stdout.write(preview_pattern(PATTERNS[source[1]], source[1]))
         return
 
     width, height = _resolve_dimensions(args.width, args.height)
 
-    if args.load:
-        board = load_pattern(args.load, width, height)
-    elif args.pattern in PATTERNS:
-        pattern = PATTERNS[args.pattern]
-        board = Board.from_pattern(pattern, width, height, offset=_centered_offset(pattern, width, height))
-    else:
+    if source is None:
         board = Board.random(width, height, density=args.density, seed=args.seed)
+    elif source[0] == "load":
+        board = load_pattern(source[1], width, height)
+    else:
+        pattern = PATTERNS[source[1]]
+        board = Board.from_pattern(pattern, width, height, offset=_centered_offset(pattern, width, height))
 
     generation = 0
     try:

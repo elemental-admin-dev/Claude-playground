@@ -258,3 +258,46 @@ def test_preview_flag_works_with_a_loaded_file(capsys):
         assert f"{path} (2x2, population 3)" in out
     finally:
         os.remove(path)
+
+
+def test_run_with_load_places_the_board_at_the_origin_not_re_centered(capsys):
+    # A saved file's text already encodes the whole board's absolute layout
+    # (render() pads the full board, not just the pattern's own bounding
+    # box), so run() with --load must place it at (0, 0) like load_pattern
+    # does directly - re-centering it (the way a named --pattern is
+    # centered) would double-offset it away from where it was saved.
+    #
+    # Loading onto a *larger* board than it was saved at is what actually
+    # distinguishes the two behaviors: _centered_offset of a 10x10 saved
+    # board's full text onto a same-sized 10x10 target is (0, 0) either
+    # way, silently passing even with the bug. Onto a 20x20 target it
+    # isn't: correctly-placed keeps the cell at (1, 1); double-centered
+    # would shift it to (1 + 5, 1 + 5) = (6, 6).
+    board = Board(10, 10, {(1, 1)})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        path = f.name
+    try:
+        save_pattern(board, path)
+        run(parse_args(["--load", path, "--width", "20", "--height", "20", "--generations", "1", "--interval", "0"]))
+        out = capsys.readouterr().out
+        frame = out.split("\x1b[H\x1b[J", 1)[1]  # the one rendered frame, after the clear-screen sequence
+        board_lines = frame.splitlines()[:20]
+        assert board_lines[1][1] == "#"  # saved position (1, 1), not shifted to (6, 6)
+        assert board_lines[6][6] == " "
+    finally:
+        os.remove(path)
+
+
+def test_selected_source_precedence_matches_between_preview_and_simulation(capsys):
+    # --load beats --pattern in both --preview and the real simulation -
+    # this is exactly the precedence _selected_source centralizes.
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        f.write("#\n")
+        path = f.name
+    try:
+        run(parse_args(["--load", path, "--pattern", "glider", "--preview"]))
+        preview_out = capsys.readouterr().out
+        assert path in preview_out
+        assert "glider" not in preview_out
+    finally:
+        os.remove(path)
