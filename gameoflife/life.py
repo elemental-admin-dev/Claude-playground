@@ -156,11 +156,26 @@ def _terminal_size(default_width: int = 60, default_height: int = 20) -> tuple[i
     return size.columns, max(size.lines - 2, 5)
 
 
-def _centered_offset(pattern: str, width: int, height: int) -> tuple[int, int]:
+def _pattern_dimensions(pattern: str) -> tuple[int, int]:
+    """The (width, height) of a pattern's own bounding box, independent of
+    any board it might later be placed on."""
     rows = pattern.strip("\n").splitlines()
-    pattern_h = len(rows)
-    pattern_w = max(len(row) for row in rows)
+    height = len(rows)
+    width = max((len(row) for row in rows), default=0)
+    return width, height
+
+
+def _centered_offset(pattern: str, width: int, height: int) -> tuple[int, int]:
+    pattern_w, pattern_h = _pattern_dimensions(pattern)
     return max((width - pattern_w) // 2, 0), max((height - pattern_h) // 2, 0)
+
+
+def preview_pattern(pattern: str, name: str) -> str:
+    """Renders a pattern at its own natural size, with no surrounding board
+    padding - a quick look at its shape without running the simulation."""
+    width, height = _pattern_dimensions(pattern)
+    board = Board.from_pattern(pattern, width, height)
+    return f"{name} ({width}x{height}, population {board.population()})\n{board.render()}\n"
 
 
 def _resolve_dimensions(width: int | None, height: int | None) -> tuple[int, int]:
@@ -174,6 +189,16 @@ def _resolve_dimensions(width: int | None, height: int | None) -> tuple[int, int
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.preview:
+        if args.load:
+            with open(args.load) as f:
+                sys.stdout.write(preview_pattern(f.read(), args.load))
+        elif args.pattern in PATTERNS:
+            sys.stdout.write(preview_pattern(PATTERNS[args.pattern], args.pattern))
+        else:
+            sys.stdout.write("--preview needs --pattern <name> or --load <file> (not 'random').\n")
+        return
+
     width, height = _resolve_dimensions(args.width, args.height)
 
     if args.load:
@@ -224,6 +249,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--pattern", choices=["random", *PATTERNS], default="random", help="initial pattern")
     parser.add_argument("--load", type=str, default=None, help="load initial pattern from a plaintext file (# alive, . dead)")
     parser.add_argument("--save", type=str, default=None, help="save the final board state to a plaintext file on exit")
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="print --pattern or --load once at its natural size and exit, without running the simulation",
+    )
     return parser.parse_args(argv)
 
 

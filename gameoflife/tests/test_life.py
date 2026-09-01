@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from life import (
     Board,
     GLIDER,
+    BLINKER,
     PULSAR,
     TOAD,
     LWSS,
@@ -17,8 +18,11 @@ from life import (
     save_pattern,
     load_pattern,
     _centered_offset,
+    _pattern_dimensions,
     _resolve_dimensions,
+    preview_pattern,
     parse_args,
+    run,
 )
 
 
@@ -206,3 +210,51 @@ def test_r_pentomino_is_a_methuselah_not_a_still_life_or_early_oscillator():
     # and shrinking chaotically for over a thousand generations in reality,
     # so 20 generations should already show many distinct population sizes.
     assert len(seen_populations) > 10
+
+
+def test_pattern_dimensions_measures_a_pattern_own_bounding_box():
+    assert _pattern_dimensions(GLIDER) == (3, 3)
+    assert _pattern_dimensions(TOAD) == (4, 2)
+    assert _pattern_dimensions(BLINKER) == (3, 1)
+
+
+def test_preview_pattern_renders_at_the_pattern_own_size_with_no_padding():
+    text = preview_pattern(GLIDER, "glider")
+    lines = text.splitlines()
+    assert lines[0] == "glider (3x3, population 5)"
+    assert len(lines) == 1 + 3  # header + exactly the 3x3 board, no board padding
+    assert all(len(line) == 3 for line in lines[1:])
+
+
+def test_preview_pattern_population_matches_the_rendered_board():
+    text = preview_pattern(TOAD, "toad")
+    board_lines = text.splitlines()[1:]
+    rendered_population = sum(line.count("#") for line in board_lines)
+    assert "population 6" in text.splitlines()[0]
+    assert rendered_population == 6
+
+
+def test_preview_flag_prints_the_pattern_once_and_skips_the_simulation(capsys):
+    run(parse_args(["--pattern", "glider", "--preview"]))
+    out = capsys.readouterr().out
+    assert "glider (3x3, population 5)" in out
+    assert "generation" not in out  # the simulation loop never ran
+
+
+def test_preview_flag_with_random_pattern_explains_it_needs_a_named_pattern(capsys):
+    run(parse_args(["--preview"]))  # default --pattern is "random"
+    out = capsys.readouterr().out
+    assert "needs --pattern" in out
+    assert "generation" not in out
+
+
+def test_preview_flag_works_with_a_loaded_file(capsys):
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        f.write("##\n.#\n")
+        path = f.name
+    try:
+        run(parse_args(["--load", path, "--preview"]))
+        out = capsys.readouterr().out
+        assert f"{path} (2x2, population 3)" in out
+    finally:
+        os.remove(path)
