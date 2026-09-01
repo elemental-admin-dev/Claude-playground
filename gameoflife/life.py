@@ -111,11 +111,32 @@ GOSPER_GLIDER_GUN = """
 ............##.......................
 """
 
+TOAD = """
+.###
+###.
+"""
+
+LWSS = """
+.####
+#...#
+....#
+#..#.
+"""
+
+R_PENTOMINO = """
+.##
+##.
+.#.
+"""
+
 PATTERNS = {
     "glider": GLIDER,
     "blinker": BLINKER,
     "pulsar": PULSAR,
     "gun": GOSPER_GLIDER_GUN,
+    "toad": TOAD,
+    "lwss": LWSS,
+    "r-pentomino": R_PENTOMINO,
 }
 
 

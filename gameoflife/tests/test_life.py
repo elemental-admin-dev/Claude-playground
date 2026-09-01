@@ -10,6 +10,9 @@ from life import (
     Board,
     GLIDER,
     PULSAR,
+    TOAD,
+    LWSS,
+    R_PENTOMINO,
     PATTERNS,
     save_pattern,
     load_pattern,
@@ -160,3 +163,46 @@ def test_parse_args_accepts_a_zero_interval():
 def test_parse_args_accepts_a_positive_interval():
     args = parse_args(["--interval", "0.5"])
     assert args.interval == 0.5
+
+
+def test_toad_is_registered_pattern():
+    assert PATTERNS["toad"] == TOAD
+
+
+def test_toad_oscillates_with_period_two():
+    board = Board.from_pattern(TOAD, 20, 20, offset=(5, 5))
+    original = set(board.live_cells)
+    stepped_once = board.step()
+    assert stepped_once.live_cells != original  # actually changes shape each step
+    assert stepped_once.step().live_cells == original  # back to itself after 2
+
+
+def test_lwss_is_registered_pattern():
+    assert PATTERNS["lwss"] == LWSS
+
+
+def test_lwss_spaceship_translates_two_cells_right_after_four_steps():
+    board = Board.from_pattern(LWSS, 30, 20, offset=(2, 2))
+    original = set(board.live_cells)
+    for _ in range(4):
+        board = board.step()
+    expected = {(x + 2, y) for x, y in original}
+    assert board.live_cells == expected
+
+
+def test_r_pentomino_is_registered_pattern():
+    assert PATTERNS["r-pentomino"] == R_PENTOMINO
+
+
+def test_r_pentomino_is_a_methuselah_not_a_still_life_or_early_oscillator():
+    board = Board.from_pattern(R_PENTOMINO, 40, 40, offset=(15, 15))
+    assert board.population() == 5
+    seen_populations = set()
+    for _ in range(20):
+        seen_populations.add(board.population())
+        board = board.step()
+    # a still life or short-period oscillator would repeat only 1-2 distinct
+    # population counts over 20 generations; the r-pentomino keeps growing
+    # and shrinking chaotically for over a thousand generations in reality,
+    # so 20 generations should already show many distinct population sizes.
+    assert len(seen_populations) > 10
