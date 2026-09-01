@@ -86,9 +86,16 @@ TICK_MS=10000 COOLDOWN_MS=5000 npm start
 - `public/` — a canvas-based client. It renders the board, shows a
   countdown to the next tick and to the viewer's own cooldown, sends
   `toggle` messages over the WebSocket on click, and outlines the cell
-  under the mouse - green while a click would register, red while your
-  cooldown is still running - so you always know exactly which cell
-  you're about to toggle and whether it'll actually take effect.
+  under the mouse - green exactly when a click would actually register
+  (a live connection *and* no cooldown), red otherwise - so you always
+  know exactly which cell you're about to toggle and whether it'll
+  actually take effect, updating live as the cooldown expires or the
+  connection drops/recovers, not just on the next mouse move. The
+  canvas's `getBoundingClientRect()` is cached and only recomputed on
+  resize/scroll/board-resize instead of on every `mousemove` (a forced-
+  layout call, and mousemove can fire dozens of times a second); a
+  resize also clears any in-flight hover cell, since a smaller
+  reconnected board could otherwise leave it pointing off-canvas.
 
 Cooldowns are currently keyed by socket IP address, which is enough to
 stop casual abuse on a single-host demo but is not a substitute for real

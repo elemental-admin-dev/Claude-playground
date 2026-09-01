@@ -16,6 +16,26 @@ let nextTickAt = 0;
 let cooldownUntil = 0;
 let cooldownMs = 60_000;
 let hoverCell = null; // { x, y } | null - the cell under the mouse, or none
+let connected = false;
+
+// Cached instead of calling canvas.getBoundingClientRect() on every
+// mousemove (a forced-layout call, and mousemove can fire dozens of times
+// a second) - refreshed only when the layout might actually have changed.
+let canvasRect = canvas.getBoundingClientRect();
+function refreshCanvasRect() {
+  canvasRect = canvas.getBoundingClientRect();
+}
+window.addEventListener("resize", refreshCanvasRect);
+window.addEventListener("scroll", refreshCanvasRect, { passive: true });
+
+// True exactly when a click on hoverCell would actually register: a click
+// with no live connection or during a cooldown both silently no-op (see
+// the click handler below), so the hover color needs to agree with both,
+// not just the cooldown.
+function hoverIsClickable() {
+  return connected && Date.now() >= cooldownUntil;
+}
+let lastHoverClickable = null; // tracks what draw() last painted, to skip redundant redraws
 
 function cellKey(x, y) {
   return `${x},${y}`;
@@ -31,13 +51,16 @@ function draw() {
   }
 
   if (hoverCell) {
-    // Green while a click would register, red while on cooldown - so the
-    // outline itself tells you whether hovering is actionable right now,
-    // not just which cell it is.
-    const onCooldown = Date.now() < cooldownUntil;
-    ctx.strokeStyle = onCooldown ? "#e65e5e" : "#5ee6a8";
+    // Green while a click would register, red otherwise (on cooldown, or
+    // no live connection) - so the outline itself tells you whether
+    // hovering is actionable right now, not just which cell it is.
+    const clickable = hoverIsClickable();
+    lastHoverClickable = clickable;
+    ctx.strokeStyle = clickable ? "#5ee6a8" : "#e65e5e";
     ctx.lineWidth = 2;
     ctx.strokeRect(hoverCell.x * CELL_SIZE + 1, hoverCell.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+  } else {
+    lastHoverClickable = null;
   }
 }
 
@@ -70,7 +93,11 @@ function updateCountdowns() {
   // Keeps the hover highlight's red/green color in sync with the cooldown
   // even if the mouse hasn't moved since it expired - otherwise it can sit
   // stuck red for a moment after a click actually becomes clickable again.
-  if (hoverCell) draw();
+  // Only actually redraws (the whole grid, not just the outline) when the
+  // clickable state has flipped since the last paint - this runs 4x/sec
+  // for as long as the mouse doesn't move, and a full redraw is wasted
+  // work the other ~3.99 times/sec when nothing visibly changed.
+  if (hoverCell && hoverIsClickable() !== lastHoverClickable) draw();
 }
 setInterval(updateCountdowns, 250);
 
@@ -82,10 +109,14 @@ function connect() {
 
   ws.addEventListener("open", () => {
     connectionEl.textContent = "live";
+    connected = true;
+    if (hoverCell) draw(); // the hover outline may have been showing red for "no connection"
   });
 
   ws.addEventListener("close", () => {
     connectionEl.textContent = "disconnected — retrying…";
+    connected = false;
+    if (hoverCell) draw();
     setTimeout(connect, 2000);
   });
 
@@ -97,6 +128,8 @@ function connect() {
         height = msg.height;
         canvas.width = width * CELL_SIZE;
         canvas.height = height * CELL_SIZE;
+        refreshCanvasRect(); // canvas's pixel size just changed, its layout box likely did too
+        hoverCell = null; // a resized board can leave a stale hoverCell pointing outside the new grid
         setLiveFromArray(msg.cells);
         nextTickAt = msg.nextTickAt;
         cooldownMs = msg.cooldownMs;
@@ -131,8 +164,7 @@ function connect() {
 }
 
 canvas.addEventListener("mousemove", (event) => {
-  const rect = canvas.getBoundingClientRect();
-  const { x, y } = screenToCell(event.clientX, event.clientY, rect, canvas.width, canvas.height, CELL_SIZE);
+  const { x, y } = screenToCell(event.clientX, event.clientY, canvasRect, canvas.width, canvas.height, CELL_SIZE);
   const next = inBounds(x, y, width, height) ? { x, y } : null;
   if (hoverCell?.x === next?.x && hoverCell?.y === next?.y) return; // no change, skip the redraw
   hoverCell = next;
@@ -148,8 +180,7 @@ canvas.addEventListener("mouseleave", () => {
 canvas.addEventListener("click", (event) => {
   if (!ws || ws.readyState !== WebSocket.OPEN) return; // no live connection to send the click on
   if (Date.now() < cooldownUntil) return;
-  const rect = canvas.getBoundingClientRect();
-  const { x, y } = screenToCell(event.clientX, event.clientY, rect, canvas.width, canvas.height, CELL_SIZE);
+  const { x, y } = screenToCell(event.clientX, event.clientY, canvasRect, canvas.width, canvas.height, CELL_SIZE);
   if (!inBounds(x, y, width, height)) return;
 
   ws.send(JSON.stringify({ type: "toggle", x, y }));
